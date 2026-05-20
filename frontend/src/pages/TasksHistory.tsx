@@ -223,8 +223,8 @@ const TasksHistory: React.FC = () => {
                       <div><span className="font-medium">Task Type:</span> {expandedTaskDetail.task_type || 'N/A'}</div>
                       <div><span className="font-medium">Content Length:</span> {expandedTaskDetail.content?.length || 0} characters</div>
                       <div><span className="font-medium">Has Result:</span> {expandedTaskDetail.result ? 'Yes' : 'No'}</div>
-                      {expandedTaskDetail.result && (
-                        <div><span className="font-medium">Result Length:</span> {(expandedTaskDetail.result as string).length} characters</div>
+                      {expandedTaskDetail.result != null && (
+                        <div><span className="font-medium">Result Length:</span> {String(expandedTaskDetail.result).length} characters</div>
                       )}
                     </div>
                   </div>
@@ -279,10 +279,10 @@ const TasksHistory: React.FC = () => {
                       {expandedTaskDetail.state_history.map((entry, index) => (
                         <div key={index} className="flex items-center justify-between py-1 border-b border-gray-100 last:border-b-0">
                           <div className="flex items-center space-x-2">
-                            {renderStateBadge(entry.state)}
+                            {renderStateBadge(entry.state as TaskState)}
                           </div>
                           <span className="text-sm text-gray-600">
-                            {format(new Date(entry.timestamp), 'PPpp')}
+                            {format(new Date(entry.timestamp as string), 'PPpp')}
                           </span>
                         </div>
                       ))}
@@ -314,7 +314,7 @@ const TasksHistory: React.FC = () => {
                   <div>
                     <h5 className="font-semibold text-gray-700 mb-3">Task Result</h5>
                     <div className="bg-white border border-gray-200 rounded-md p-4 max-h-64 overflow-y-auto">
-                      <pre className="text-sm whitespace-pre-wrap text-gray-800">{expandedTaskDetail.result}</pre>
+                      <pre className="text-sm whitespace-pre-wrap text-gray-800">{String(expandedTaskDetail.result)}</pre>
                     </div>
                   </div>
                 )}

@@ -67,6 +67,24 @@ def main():
                     last_heartbeat = current_time
                     logger.debug(f"Updated heartbeat for worker {worker_id}")
 
+                # First, check the priority sorted set for high-priority tasks
+                # ZPOPMIN returns and removes the lowest score (highest priority due to negative scoring)
+                priority_result = redis_conn.zpopmin(
+                    "tasks:pending:priority", count=1
+                )
+
+                if priority_result:
+                    task_id, score = priority_result[0]
+                    logger.info(
+                        f"Received priority task {task_id} (priority score: {score})"
+                    )
+                    celery_app.send_task("process_task", args=[task_id])
+                    processed_count += 1
+                    logger.info(
+                        f"Dispatched priority task {task_id} for processing (total: {processed_count})"
+                    )
+                    continue
+
                 # Get current retry queue depth for adaptive ratio
                 retry_depth = redis_conn.llen("tasks:pending:retry")
                 retry_ratio = calculate_adaptive_retry_ratio(retry_depth)

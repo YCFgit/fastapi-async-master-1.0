@@ -1,6 +1,6 @@
 // frontend/src/pages/Dashboard.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { QueueStatus, SSEMessage, OpenRouterStatus, apiService } from '../lib/api';
+import { QueueStatus, SSEMessage, apiService } from '../lib/api';
 import { TaskTypeConfigResponse } from '../lib/types';
 import { fetchTaskTypes } from '../lib/task-types-api';
 import { submitTask } from '../lib/tasks-api';
@@ -12,7 +12,7 @@ const Dashboard: React.FC = () => {
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [openRouterStatus, setOpenRouterStatus] = useState<OpenRouterStatus | null>(null);
+  const [gatewayHealthy, setGatewayHealthy] = useState<boolean | null>(null);
 
   // Submit task state
   const [taskTypes, setTaskTypes] = useState<TaskTypeConfigResponse[]>([]);
@@ -77,26 +77,23 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // Fetch OpenRouter status on component mount and periodically
+  // Fetch gateway health on component mount and periodically
   useEffect(() => {
-    const fetchOpenRouterStatus = async () => {
+    const fetchHealth = async () => {
       try {
-        const status = await apiService.getOpenRouterStatus();
-        setOpenRouterStatus(status);
+        const health = await apiService.getHealth();
+        setGatewayHealthy(health.status === 'healthy');
       } catch (error) {
-        console.error('Failed to fetch OpenRouter status:', error);
-        setOpenRouterStatus({
-          status: 'error',
-          message: 'Status check failed'
-        });
+        console.error('Failed to fetch gateway health:', error);
+        setGatewayHealthy(false);
       }
     };
 
     // Initial fetch
-    fetchOpenRouterStatus();
+    fetchHealth();
 
     // Set up periodic refresh (every 5 minutes)
-    const interval = setInterval(fetchOpenRouterStatus, 5 * 60 * 1000);
+    const interval = setInterval(fetchHealth, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, []);
@@ -189,37 +186,12 @@ const Dashboard: React.FC = () => {
     return { text: 'Disconnected', color: 'bg-red-500' };
   };
 
-  const getOpenRouterStatus = () => {
-    if (!openRouterStatus) {
-      return { text: 'Loading...', color: 'bg-gray-500', details: null };
-    }
-
-    let details = null;
-    if (openRouterStatus.circuit_breaker_open) {
-      details = `Circuit breaker open (${openRouterStatus.consecutive_failures || 0} failures)`;
-    } else if (openRouterStatus.consecutive_failures && openRouterStatus.consecutive_failures > 0) {
-      details = `${openRouterStatus.consecutive_failures} consecutive failures`;
-    }
-
-    switch (openRouterStatus.status) {
-      case 'api_key_missing':
-        return { text: 'API Key missing', color: 'bg-red-500', details };
-      case 'api_key_invalid':
-        return { text: 'API Key invalid', color: 'bg-red-500', details };
-      case 'credits_exhausted':
-        return { text: 'Credits exhausted', color: 'bg-orange-500', details };
-      case 'rate_limited':
-        return { text: 'Rate limited', color: 'bg-orange-500', details };
-      case 'active':
-        return { text: 'Service active', color: 'bg-green-500', details };
-      case 'error':
-      default:
-        return { text: 'Status check failed', color: 'bg-red-500', details };
-    }
-  };
-
   const connectionStatus = getConnectionStatus();
-  const openRouterStatusBadge = getOpenRouterStatus();
+  const gatewayStatusBadge = gatewayHealthy === null
+    ? { text: 'Checking...', color: 'bg-gray-500' }
+    : gatewayHealthy
+      ? { text: 'Gateway healthy', color: 'bg-green-500' }
+      : { text: 'Gateway unhealthy', color: 'bg-red-500' };
 
   return (
     <div className="space-y-6">
@@ -234,15 +206,10 @@ const Dashboard: React.FC = () => {
             </span>
           </div>
           <div className="flex items-center space-x-2 px-3 py-1 rounded-full bg-gray-100">
-            <div className={`w-2 h-2 rounded-full ${openRouterStatusBadge.color}`}></div>
+            <div className={`w-2 h-2 rounded-full ${gatewayStatusBadge.color}`}></div>
             <span className="text-sm font-medium text-gray-700">
-              OpenRouter: {openRouterStatusBadge.text}
+              {gatewayStatusBadge.text}
             </span>
-            {openRouterStatusBadge.details && (
-              <span className="text-xs text-gray-500">
-                ({openRouterStatusBadge.details})
-              </span>
-            )}
           </div>
         </div>
         {lastUpdate && (

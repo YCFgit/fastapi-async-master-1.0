@@ -276,8 +276,8 @@ class TaskTypeRegistry:
             "max_retries": str(config.max_retries),
             "retry_on_status": config.retry_on_status or "",
             "retry_schedule": config.retry_schedule or "",
-            "circuit_breaker_enabled": str(config.circuit_breaker_enabled),
-            "enabled": str(config.enabled),
+            "circuit_breaker_enabled": str(config.circuit_breaker_enabled).lower(),
+            "enabled": str(config.enabled).lower(),
         }
 
         # Store complex types as JSON

@@ -10,8 +10,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -59,3 +59,4 @@ frontend/node_modules/
 # Logs
 *.log
 logs/
+src/worker/celerybeat-schedule

@@ -219,7 +219,9 @@ class GenericAPIExecutor:
         extra_raw = config.get("request_headers", config.get("extra_headers", ""))
         if extra_raw:
             try:
-                extra_headers = json.loads(extra_raw) if isinstance(extra_raw, str) else extra_raw
+                parsed = json.loads(extra_raw) if isinstance(extra_raw, str) else extra_raw
+                if isinstance(parsed, dict):
+                    extra_headers = parsed
             except json.JSONDecodeError:
                 pass
 
@@ -229,7 +231,8 @@ class GenericAPIExecutor:
             auth_config_dict = auth_config_raw
         elif isinstance(auth_config_raw, str):
             try:
-                auth_config_dict = json.loads(auth_config_raw) if auth_config_raw else {}
+                parsed = json.loads(auth_config_raw) if auth_config_raw else {}
+                auth_config_dict = parsed if isinstance(parsed, dict) else {}
             except json.JSONDecodeError:
                 auth_config_dict = {}
         else:
@@ -250,7 +253,8 @@ class GenericAPIExecutor:
             auth_config_dict = auth_config_raw
         elif isinstance(auth_config_raw, str):
             try:
-                auth_config_dict = json.loads(auth_config_raw) if auth_config_raw else {}
+                parsed = json.loads(auth_config_raw) if auth_config_raw else {}
+                auth_config_dict = parsed if isinstance(parsed, dict) else {}
             except json.JSONDecodeError:
                 auth_config_dict = {}
         else:

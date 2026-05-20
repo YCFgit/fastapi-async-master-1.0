@@ -769,7 +769,7 @@ const TaskTypeManager: React.FC = () => {
                 </div>
               )}
 
-              {testResult.response_body && (
+              {testResult.response_body != null && (
                 <div>
                   <span className="font-medium">Response Body:</span>
                   <pre className="bg-gray-100 rounded p-2 text-xs mt-1 overflow-auto max-h-48">
