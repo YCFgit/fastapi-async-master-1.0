@@ -1,10 +1,12 @@
 # src/worker/api_executor.py
 """Generic API execution engine that calls any HTTP API based on configuration."""
 
+import ipaddress
 import json
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Type
+from urllib.parse import urlparse
 
 import httpx
 
@@ -91,6 +93,21 @@ class GenericAPIExecutor:
 
     # HTTP status codes that are considered transient (retryable) errors.
     _TRANSIENT_STATUSES: set = {429, 500, 502, 503, 504}
+
+    # Maximum response body size (10 MB).
+    _MAX_RESPONSE_SIZE: int = 10 * 1024 * 1024
+
+    # Private/loopback network ranges that are blocked for SSRF protection.
+    _BLOCKED_NETWORKS: list = [
+        ipaddress.ip_network("127.0.0.0/8"),
+        ipaddress.ip_network("10.0.0.0/8"),
+        ipaddress.ip_network("172.16.0.0/12"),
+        ipaddress.ip_network("192.168.0.0/16"),
+        ipaddress.ip_network("169.254.0.0/16"),
+        ipaddress.ip_network("::1/128"),
+        ipaddress.ip_network("fc00::/7"),
+        ipaddress.ip_network("fe80::/10"),
+    ]
 
     # Substrings in error messages that indicate a dependency failure.
     _DEPENDENCY_PATTERNS: list = [
@@ -259,6 +276,28 @@ class GenericAPIExecutor:
         }
         return self._template_renderer.render_json(template_str, render_data)
 
+    def _check_ssrf(self, url: str) -> None:
+        """Validate that the URL does not target a private/loopback address.
+
+        Raises PermanentError if the URL resolves to a blocked network.
+        """
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            raise PermanentError(f"Invalid URL: no hostname in '{url}'")
+
+        try:
+            addr = ipaddress.ip_address(hostname)
+        except ValueError:
+            # hostname is a domain name, not an IP — allow it
+            return
+
+        for network in self._BLOCKED_NETWORKS:
+            if addr in network:
+                raise PermanentError(
+                    f"SSRF blocked: URL '{url}' targets private address {addr}"
+                )
+
     async def _make_request(
         self,
         method: str,
@@ -272,7 +311,12 @@ class GenericAPIExecutor:
 
         Returns (status_code, response_text).
         """
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        self._check_ssrf(url)
+
+        async with httpx.AsyncClient(
+            timeout=timeout,
+            follow_redirects=False,
+        ) as client:
             response = await client.request(
                 method=method,
                 url=url,
@@ -280,6 +324,20 @@ class GenericAPIExecutor:
                 params=query_params,
                 json=body,
             )
+
+            # Enforce response body size limit
+            content_length = response.headers.get("content-length")
+            if content_length and int(content_length) > self._MAX_RESPONSE_SIZE:
+                raise PermanentError(
+                    f"Response body too large: {content_length} bytes "
+                    f"(max {self._MAX_RESPONSE_SIZE})"
+                )
+            if len(response.content) > self._MAX_RESPONSE_SIZE:
+                raise PermanentError(
+                    f"Response body too large: {len(response.content)} bytes "
+                    f"(max {self._MAX_RESPONSE_SIZE})"
+                )
+
             return response.status_code, response.text
 
     def _parse_response(

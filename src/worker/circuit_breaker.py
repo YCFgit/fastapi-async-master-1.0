@@ -7,16 +7,13 @@ Provides per-task-type circuit breaker isolation. Each ``type_id`` gets its own
 affect others.
 """
 
-import asyncio
 import os
 import random
-from typing import Dict, List
+from typing import Dict
 
-import httpx
 import pybreaker
 
 from config import settings
-from rate_limiter import wait_for_rate_limit_token
 
 
 # ---------------------------------------------------------------------------
@@ -112,140 +109,6 @@ def get_container_id() -> str:
             return os.uname().nodename[:12]
         except Exception:
             return "unknown"
-
-
-# ---------------------------------------------------------------------------
-# Generic API caller with per-type circuit breaker
-# ---------------------------------------------------------------------------
-
-
-async def call_api(
-    type_id: str,
-    messages: List[Dict[str, str]],
-    retry_attempt: int = 0,
-) -> str:
-    """
-    Call an API with circuit breaker protection and distributed rate limiting.
-
-    The circuit breaker used is determined by *type_id*, providing full
-    isolation between different task types.
-
-    Args:
-        type_id: The task type identifier
-        messages: List of message dictionaries for the chat completion API
-                 (e.g., [{"role": "user", "content": "..."}])
-        retry_attempt: Current retry attempt number for backoff calculation
-
-    Returns:
-        The response content from the API
-
-    Raises:
-        Exception: If the API call fails
-    """
-    breaker = get_circuit_breaker(type_id)
-
-    # Use the circuit breaker as a decorator-style context via __call__
-    # We wrap the inner coroutine so each type_id uses its own breaker.
-    @breaker
-    async def _inner_call() -> str:
-        # Acquire a rate limit token from the distributed rate limiter
-        rate_limit_timeout = 60.0
-
-        if not await wait_for_rate_limit_token(
-            type_id, tokens=1, timeout=rate_limit_timeout
-        ):
-            raise Exception(
-                f"Rate limit token acquisition timeout after {rate_limit_timeout}s "
-                f"for type '{type_id}'"
-            )
-
-        max_retries = 5
-
-        for attempt in range(max_retries):
-            try:
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        f"{settings.openrouter_base_url}/chat/completions",
-                        headers={
-                            "Authorization": f"Bearer {settings.openrouter_api_key}",
-                            "Content-Type": "application/json",
-                        },
-                        json={
-                            "model": settings.openrouter_model,
-                            "messages": messages,
-                        },
-                        timeout=settings.openrouter_timeout,
-                    )
-
-                    # Handle rate limiting (HTTP 429) with exponential backoff
-                    if response.status_code == 429:
-                        if attempt < max_retries - 1:
-                            # Check for Retry-After header
-                            retry_after = response.headers.get("retry-after")
-                            if retry_after:
-                                try:
-                                    delay = float(retry_after)
-                                except ValueError:
-                                    delay = calculate_backoff_delay(
-                                        attempt, base_delay=60.0
-                                    )
-                            else:
-                                delay = calculate_backoff_delay(
-                                    attempt, base_delay=60.0
-                                )
-
-                            # Add extra jitter for thundering herd prevention
-                            jitter = random.uniform(0, min(delay * 0.1, 30))
-                            total_delay = delay + jitter
-
-                            await asyncio.sleep(total_delay)
-                            continue
-                        else:
-                            raise Exception(
-                                f"API rate limit exceeded after {max_retries} "
-                                f"attempts for type '{type_id}': "
-                                f"{response.status_code}"
-                            )
-
-                    # Handle other HTTP errors
-                    if response.status_code != 200:
-                        raise Exception(
-                            f"API error for type '{type_id}': "
-                            f"{response.status_code}"
-                        )
-
-                    result = response.json()
-                    return result["choices"][0]["message"]["content"]
-
-            except httpx.TimeoutException:
-                if attempt < max_retries - 1:
-                    delay = calculate_backoff_delay(
-                        attempt, base_delay=2.0, max_delay=60.0
-                    )
-                    await asyncio.sleep(delay)
-                    continue
-                else:
-                    raise Exception(
-                        f"API timeout after multiple attempts for type '{type_id}'"
-                    )
-            except httpx.RequestError as e:
-                if attempt < max_retries - 1:
-                    delay = calculate_backoff_delay(
-                        attempt, base_delay=1.0, max_delay=30.0
-                    )
-                    await asyncio.sleep(delay)
-                    continue
-                else:
-                    raise Exception(
-                        f"API request error for type '{type_id}': {str(e)}"
-                    )
-
-        # All attempts exhausted
-        raise Exception(
-            f"API call failed after all retry attempts for type '{type_id}'"
-        )
-
-    return await _inner_call()
 
 
 # ---------------------------------------------------------------------------

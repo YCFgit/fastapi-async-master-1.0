@@ -1,7 +1,7 @@
 # src/api/schemas.py
 """Pydantic schemas for API request/response models."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -79,6 +79,14 @@ class TaskTypeConfig(BaseModel):
         None,
         description="JSONPath expression to extract the result from the API response",
     )
+    error_jsonpath: Optional[str] = Field(
+        None,
+        description="JSONPath expression to extract error message from the API response",
+    )
+    status_jsonpath: Optional[str] = Field(
+        None,
+        description="JSONPath expression to extract status field from the API response",
+    )
     response_parser: Optional[str] = Field(
         None,
         description="Name of a custom response parser function (alternative to jsonpath)",
@@ -103,6 +111,14 @@ class TaskTypeConfig(BaseModel):
         description="Maximum number of retries for this task type",
         ge=0,
         le=10,
+    )
+    retry_on_status: Optional[str] = Field(
+        None,
+        description="Comma-separated HTTP status codes that trigger retries (e.g. '429,500,503')",
+    )
+    retry_schedule: Optional[str] = Field(
+        None,
+        description="Comma-separated retry delays in seconds (e.g. '5,15,60')",
     )
     rate_limit_requests: Optional[int] = Field(
         None,
@@ -189,10 +205,14 @@ class TaskTypeConfigResponse(BaseModel):
     request_template: Optional[str] = Field(None, description="Jinja2 template for the request body")
     request_headers: Optional[Dict[str, str]] = Field(None, description="Additional headers")
     response_jsonpath: Optional[str] = Field(None, description="JSONPath expression for response parsing")
+    error_jsonpath: Optional[str] = Field(None, description="JSONPath for error message extraction")
+    status_jsonpath: Optional[str] = Field(None, description="JSONPath for status field extraction")
     response_parser: Optional[str] = Field(None, description="Custom response parser function name")
     auth_type: AuthType = Field(default=AuthType.NONE, description="Type of authentication")
     timeout: int = Field(default=30, description="HTTP request timeout in seconds")
     max_retries: int = Field(default=3, description="Maximum number of retries")
+    retry_on_status: Optional[str] = Field(None, description="HTTP status codes that trigger retries")
+    retry_schedule: Optional[str] = Field(None, description="Retry delays in seconds")
     rate_limit_requests: Optional[int] = Field(None, description="Rate limit requests count")
     rate_limit_interval: Optional[int] = Field(None, description="Rate limit interval in seconds")
     circuit_breaker_enabled: bool = Field(default=True, description="Circuit breaker enabled")
@@ -320,7 +340,7 @@ class ErrorResponse(BaseModel):
 
     detail: str = Field(..., description="Error message")
     error_code: Optional[str] = Field(None, description="Error code")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class TaskRetryRequest(BaseModel):

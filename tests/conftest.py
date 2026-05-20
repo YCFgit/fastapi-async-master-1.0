@@ -41,13 +41,3 @@ def sample_task_data():
         "retry_count": "0",
         "max_retries": "3",
     }
-
-
-@pytest.fixture
-def mock_openrouter_response():
-    """Mock OpenRouter API response."""
-    return {
-        "choices": [
-            {"message": {"content": "This is a test summary of the provided content."}}
-        ]
-    }

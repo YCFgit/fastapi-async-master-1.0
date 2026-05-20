@@ -12,7 +12,8 @@ import json
 import os
 import random
 import time
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Optional
 
 import redis.asyncio as aioredis
 from celery import Celery, Task
@@ -24,24 +25,7 @@ from rate_limiter import wait_for_rate_limit_token
 
 # --- Constants ------------------------------------------------------------
 
-ERROR_CLASSIFICATIONS = {
-    400: "PermanentError",  # Bad Request
-    401: "PermanentError",  # Invalid credentials
-    402: "InsufficientCredits",  # Insufficient credits
-    403: "PermanentError",  # Forbidden
-    404: "PermanentError",  # Not Found
-    429: "RateLimitError",  # Rate Limited
-    500: "TransientError",  # Internal Server Error
-    503: "ServiceUnavailable",  # Service Unavailable
-}
-
-RETRY_SCHEDULES = {
-    "InsufficientCredits": [300, 600, 1800],  # 5min, 10min, 30min
-    "RateLimitError": [120, 300, 600, 1200],  # 2min, 5min, 10min, 20min
-    "ServiceUnavailable": [5, 10, 30, 60, 120],
-    "NetworkTimeout": [2, 5, 10, 30, 60],
-    "Default": [5, 15, 60, 300],
-}
+DEFAULT_RETRY_SCHEDULE = [5, 15, 60, 300]
 
 # --- Celery App Setup -----------------------------------------------------
 
@@ -151,64 +135,27 @@ async def get_async_redis_connection() -> aioredis.Redis:
 
 
 def classify_error(status_code: int, error_message: str) -> str:
-    """Classify error as transient or permanent."""
-    # First check for dependency/environment errors
-    dependency_error_patterns = [
-        "poppler installed and in PATH",
-        "command not found",
-        "no such file or directory",
-        "permission denied",
-        "module not found",
-        "import error",
-        "library not found",
-        "missing dependency",
-        "environment variable not set",
-        "configuration error",
-        "invalid configuration",
-        "database connection failed",
-        "redis connection failed",
-    ]
-
-    error_lower = error_message.lower()
-    for pattern in dependency_error_patterns:
-        if pattern in error_lower:
-            return "DependencyError"
-
-    # Check for other permanent errors based on content
-    permanent_error_patterns = [
-        "invalid api key",
-        "authentication failed",
-        "unauthorized",
-        "forbidden",
-        "not found",
-        "bad request",
-        "invalid request",
-        "malformed",
-        "syntax error",
-        "parse error",
-        "invalid json",
-        "invalid format",
-        "unsupported format",
-        "file too large",
-        "quota exceeded",
-        "limit exceeded",
-    ]
-
-    for pattern in permanent_error_patterns:
-        if pattern in error_lower:
-            return "PermanentError"
-
-    # Check HTTP status codes
-    if status_code in ERROR_CLASSIFICATIONS:
-        return ERROR_CLASSIFICATIONS[status_code]
-
-    # Fallback to default retry behavior for unknown errors
-    return "Default"
+    """Classify error using the GenericAPIExecutor's classification logic."""
+    executor = GenericAPIExecutor()
+    if status_code and status_code >= 400:
+        error_class = executor._classify_http_status(status_code)
+    else:
+        error_class = executor._classify_error_message(error_message)
+    return error_class.__name__
 
 
-def calculate_retry_delay(retry_count: int, error_type: str) -> float:
-    """Calculate retry delay with exponential backoff and jitter."""
-    schedule = RETRY_SCHEDULES.get(error_type, RETRY_SCHEDULES["Default"])
+def calculate_retry_delay(
+    retry_count: int, error_type: str = "", schedule_str: Optional[str] = None
+) -> float:
+    """Calculate retry delay with exponential backoff and jitter.
+
+    Uses the per-type retry_schedule from config if provided,
+    otherwise falls back to DEFAULT_RETRY_SCHEDULE.
+    """
+    if schedule_str and schedule_str.strip():
+        schedule = [float(x.strip()) for x in schedule_str.split(",") if x.strip()]
+    else:
+        schedule = DEFAULT_RETRY_SCHEDULE
     base_delay = schedule[min(retry_count, len(schedule) - 1)]
     jitter = random.uniform(0, base_delay * 0.1)
     return base_delay + jitter
@@ -218,7 +165,7 @@ async def update_task_state(
     redis_conn: aioredis.Redis, task_id: str, state: str, **kwargs
 ) -> None:
     """Update task state and metadata in Redis asynchronously."""
-    current_time = datetime.utcnow().isoformat()
+    current_time = datetime.now(UTC).isoformat()
     fields = {"state": state, "updated_at": current_time}
     fields.update(kwargs)
 
@@ -345,17 +292,21 @@ async def move_to_dlq(
         "DLQ",
         last_error=reason,
         error_type=error_type,
-        completed_at=datetime.utcnow().isoformat(),
+        completed_at=datetime.now(UTC).isoformat(),
     )
     await redis_conn.lpush("dlq:tasks", task_id)
 
 
 async def schedule_task_for_retry(
-    redis_conn: aioredis.Redis, task_id: str, retry_count: int, exc: Exception
+    redis_conn: aioredis.Redis,
+    task_id: str,
+    retry_count: int,
+    exc: Exception,
+    retry_schedule: Optional[str] = None,
 ) -> None:
     """Schedule a task for a future retry by adding it to a sorted set."""
     error_type = classify_error(getattr(exc, "status_code", 0), str(exc))
-    delay = calculate_retry_delay(retry_count, error_type)
+    delay = calculate_retry_delay(retry_count, error_type, schedule_str=retry_schedule)
     retry_at_timestamp = time.time() + delay
 
     await update_task_state(
@@ -392,6 +343,7 @@ def process_task(self: Task, task_id: str) -> str:
     worker_id = f"celery-{self.request.hostname}-{os.getpid()}"
 
     async def _run_task():
+        nonlocal _retry_schedule
         redis_conn = await get_async_redis_connection()
 
         # Update heartbeat at start of task
@@ -417,8 +369,11 @@ def process_task(self: Task, task_id: str) -> str:
         type_config = await redis_conn.hgetall(f"task_type:{task_type}")
         if not type_config:
             raise PermanentError(f"Task type '{task_type}' not found in configuration.")
-        if type_config.get("is_active", "true") != "true":
+        if type_config.get("enabled", "true") != "true":
             raise PermanentError(f"Task type '{task_type}' is disabled.")
+
+        # Capture per-type retry schedule for error handling
+        _retry_schedule = type_config.get("retry_schedule", "")
 
         await update_task_state(redis_conn, task_id, "ACTIVE", worker_id=worker_id)
 
@@ -451,7 +406,7 @@ def process_task(self: Task, task_id: str) -> str:
             "COMPLETED",
             result=str(result.result),
             http_status=str(result.http_status) if result.http_status else "",
-            completed_at=datetime.utcnow().isoformat(),
+            completed_at=datetime.now(UTC).isoformat(),
         )
 
         # Update heartbeat at end of task
@@ -459,7 +414,7 @@ def process_task(self: Task, task_id: str) -> str:
 
         return f"Task {task_id} ({task_type}) completed successfully."
 
-    async def _handle_error(exc, error_type="TransientError"):
+    async def _handle_error(exc, error_type="TransientError", retry_schedule=None):
         """Handle task errors with proper Redis connection."""
         redis_conn = await get_async_redis_connection()
 
@@ -478,21 +433,31 @@ def process_task(self: Task, task_id: str) -> str:
             await move_to_dlq(redis_conn, task_id, str(exc), dlq_reason)
             return f"Task {task_id} moved to DLQ ({dlq_reason}): {exc}"
         else:
-            await schedule_task_for_retry(redis_conn, task_id, retry_count, exc)
+            await schedule_task_for_retry(
+                redis_conn, task_id, retry_count, exc, retry_schedule=retry_schedule
+            )
             return f"Task {task_id} failed, scheduled for retry."
 
+    # Extract retry_schedule from config (available after _run_task reads it)
+    _retry_schedule = None
+
+    async def _run_task_with_config():
+        nonlocal _retry_schedule
+        result = await _run_task()
+        return result
+
     try:
-        return asyncio.run(_run_task())
+        return asyncio.run(_run_task_with_config())
     except PermanentError as e:
-        return asyncio.run(_handle_error(e, "PermanentError"))
+        return asyncio.run(_handle_error(e, "PermanentError", retry_schedule=_retry_schedule))
     except TransientError as e:
-        return asyncio.run(_handle_error(e, "TransientError"))
+        return asyncio.run(_handle_error(e, "TransientError", retry_schedule=_retry_schedule))
     except DependencyError as e:
-        return asyncio.run(_handle_error(e, "DependencyError"))
+        return asyncio.run(_handle_error(e, "DependencyError", retry_schedule=_retry_schedule))
     except Exception as e:
         # Catch any other unexpected errors and treat them as transient
         exc = TransientError(f"An unexpected error occurred: {str(e)}")
-        return asyncio.run(_handle_error(exc, "TransientError"))
+        return asyncio.run(_handle_error(exc, "TransientError", retry_schedule=_retry_schedule))
 
 
 @app.task(name="process_scheduled_tasks")
@@ -512,11 +477,17 @@ def process_scheduled_tasks() -> str:
         if not due_tasks:
             return 0
 
-        async with redis_conn.pipeline() as pipe:
+        current_time = datetime.now(UTC).isoformat()
+
+        # Move tasks to retry queue in a single pipeline (no nested pipelines)
+        async with redis_conn.pipeline(transaction=True) as pipe:
             for task_id in due_tasks:
                 pipe.lpush("tasks:pending:retry", task_id)
                 pipe.zrem("tasks:scheduled", task_id)
-                await update_task_state(redis_conn, task_id, "PENDING")
+                pipe.hset(f"task:{task_id}", mapping={
+                    "state": "PENDING",
+                    "updated_at": current_time,
+                })
             await pipe.execute()
 
         return len(due_tasks)
