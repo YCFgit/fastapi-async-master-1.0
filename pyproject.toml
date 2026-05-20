@@ -1,0 +1,47 @@
+[project]
+name = "asynctaskflow"
+version = "1.0.0"
+description = "Production-ready distributed API task gateway with FastAPI, Redis, and Celery"
+authors = [{name = "AsyncTaskFlow", email = "bob@ralexander.it"}]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "celery>=5.3.0",
+    "redis>=5.0.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "httpx>=0.25.0",
+    "python-multipart>=0.0.6",
+    "jinja2>=3.1.0",
+    "jsonpath-ng>=1.6.0",
+    "pybreaker>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.7.0",
+    "pre-commit>=3.5.0",
+    "respx>=0.21.0",
+    "fakeredis>=2.20.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = ["--strict-markers", "--strict-config"]
