@@ -35,7 +35,7 @@ app.conf.update(
     task_ignore_result=True,
     # Task routing
     task_routes={
-        "summarize_text": {"queue": "default"},
+        "process_task": {"queue": "default"},
         "process_scheduled_tasks": {"queue": "scheduler"},
     },
     # Beat schedule for periodic tasks

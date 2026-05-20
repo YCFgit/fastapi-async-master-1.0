@@ -27,7 +27,8 @@ async def health_check(request: Request) -> HealthStatus:
 
     Checks the status of:
     - Redis connectivity
-    - Celery workers
+    - Worker heartbeats
+    - Task type registrations
 
     Returns overall system health and component-specific status.
     Always returns 200 with status details, never raises exceptions.

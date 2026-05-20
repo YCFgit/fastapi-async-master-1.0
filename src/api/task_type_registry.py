@@ -7,7 +7,10 @@ from typing import Any, Dict, List, Optional
 
 import redis.asyncio as aioredis
 
-from api.schemas import AuthType, TaskTypeConfig, TaskTypeConfigResponse
+try:
+    from schemas import AuthType, TaskTypeConfig, TaskTypeConfigResponse
+except ImportError:
+    from api.schemas import AuthType, TaskTypeConfig, TaskTypeConfigResponse
 
 
 class TaskTypeRegistry:

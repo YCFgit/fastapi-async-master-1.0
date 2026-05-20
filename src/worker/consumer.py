@@ -89,8 +89,8 @@ def main():
                 queue_name, task_id = result
                 logger.info(f"Received task {task_id} from {queue_name}")
 
-                # Now trigger the actual summarization task using the correct task name
-                celery_app.send_task("summarize_text", args=[task_id])
+                # Now trigger the actual task processing using the generalized task name
+                celery_app.send_task("process_task", args=[task_id])
 
                 processed_count += 1
                 logger.info(
