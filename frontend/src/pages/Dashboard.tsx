@@ -1,6 +1,9 @@
 // frontend/src/pages/Dashboard.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { QueueStatus, SSEMessage, OpenRouterStatus, apiService } from '../lib/api';
+import { TaskTypeConfigResponse } from '../lib/types';
+import { fetchTaskTypes } from '../lib/task-types-api';
+import { submitTask } from '../lib/tasks-api';
 import TaskFlowGraph from '../components/dashboard/TaskFlowGraph';
 import QueueStats from '../components/dashboard/QueueStats';
 import WorkerStats from '../components/dashboard/WorkerStats';
@@ -10,6 +13,69 @@ const Dashboard: React.FC = () => {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [openRouterStatus, setOpenRouterStatus] = useState<OpenRouterStatus | null>(null);
+
+  // Submit task state
+  const [taskTypes, setTaskTypes] = useState<TaskTypeConfigResponse[]>([]);
+  const [submitTaskType, setSubmitTaskType] = useState<string>('');
+  const [submitContent, setSubmitContent] = useState<string>('');
+  const [submitParams, setSubmitParams] = useState<string>('{}');
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [submitResult, setSubmitResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const loadTaskTypes = useCallback(async () => {
+    try {
+      const types = await fetchTaskTypes(false);
+      setTaskTypes(types);
+      if (types.length > 0 && !submitTaskType) {
+        setSubmitTaskType(types[0].type_id);
+      }
+    } catch (error) {
+      console.error('Failed to fetch task types:', error);
+    }
+  }, [submitTaskType]);
+
+  useEffect(() => {
+    loadTaskTypes();
+  }, [loadTaskTypes]);
+
+  const handleSubmitTask = async () => {
+    if (!submitTaskType || !submitContent.trim()) {
+      setSubmitResult({ success: false, message: 'Please select a task type and enter content.' });
+      return;
+    }
+
+    let params: Record<string, unknown> | undefined;
+    try {
+      params = submitParams.trim() ? JSON.parse(submitParams) : undefined;
+    } catch {
+      setSubmitResult({ success: false, message: 'Invalid JSON in params field.' });
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitResult(null);
+
+    try {
+      const result = await submitTask({
+        task_type: submitTaskType,
+        content: submitContent,
+        params,
+      });
+      setSubmitResult({
+        success: true,
+        message: `Task submitted successfully! Task ID: ${result.task_id}`,
+      });
+      setSubmitContent('');
+      setSubmitParams('{}');
+    } catch (err: unknown) {
+      setSubmitResult({
+        success: false,
+        message: err instanceof Error ? err.message : 'Failed to submit task',
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // Fetch OpenRouter status on component mount and periodically
   useEffect(() => {
@@ -187,6 +253,69 @@ const Dashboard: React.FC = () => {
             </p>
           </div>
         )}
+      </div>
+
+      {/* Submit Task Section */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Submit Task</h3>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Task Type</label>
+            <select
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+              value={submitTaskType}
+              onChange={(e) => setSubmitTaskType(e.target.value)}
+            >
+              {taskTypes.length === 0 ? (
+                <option value="">No task types available</option>
+              ) : (
+                taskTypes.map((type) => (
+                  <option key={type.type_id} value={type.type_id}>
+                    {type.name} ({type.type_id})
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
+            <textarea
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              rows={2}
+              value={submitContent}
+              onChange={(e) => setSubmitContent(e.target.value)}
+              placeholder="Enter content to process..."
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Params (JSON)</label>
+            <input
+              type="text"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
+              value={submitParams}
+              onChange={(e) => setSubmitParams(e.target.value)}
+              placeholder='{"key": "value"}'
+            />
+          </div>
+        </div>
+        <div className="mt-4 flex items-center space-x-4">
+          <button
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleSubmitTask}
+            disabled={submitting || taskTypes.length === 0}
+          >
+            {submitting ? 'Submitting...' : 'Submit Task'}
+          </button>
+          {submitResult && (
+            <p
+              className={`text-sm ${
+                submitResult.success ? 'text-green-600' : 'text-red-600'
+              }`}
+            >
+              {submitResult.message}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Task Flow Graph - moved to top */}

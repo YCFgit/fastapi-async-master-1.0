@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { fetchTaskSummaries, fetchTaskDetail, deleteTask } from '@/lib/tasks-api';
-import { TaskSummary, TaskSummaryListResponse, TaskDetail, TaskState } from '@/lib/types';
+import { fetchTaskTypes } from '@/lib/task-types-api';
+import { TaskSummary, TaskSummaryListResponse, TaskDetail, TaskState, TaskTypeConfigResponse } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -22,6 +23,7 @@ const TasksHistory: React.FC = () => {
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [expandedTaskDetail, setExpandedTaskDetail] = useState<TaskDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [taskTypes, setTaskTypes] = useState<TaskTypeConfigResponse[]>([]);
 
   const [filters, setFilters] = useState({
     task_id: searchParams.get('task_id') || '',
@@ -72,6 +74,18 @@ const TasksHistory: React.FC = () => {
     );
   }, [loadTasks, filters, setSearchParams]);
 
+  useEffect(() => {
+    const loadTaskTypes = async () => {
+      try {
+        const types = await fetchTaskTypes(false);
+        setTaskTypes(types);
+      } catch (error) {
+        console.error('Failed to load task types:', error);
+      }
+    };
+    loadTaskTypes();
+  }, []);
+
   const handleFilterChange = (key: string, value: string | number) => {
     setFilters((prev) => ({ ...prev, [key]: value, page: 1 }));
   };
@@ -106,8 +120,12 @@ const TasksHistory: React.FC = () => {
     const colorMap: { [key: string]: string } = {
       'summarize': 'bg-blue-500 border-blue-600',
       'pdfxtract': 'bg-purple-500 border-purple-600',
+      'translate': 'bg-teal-500 border-teal-600',
     };
-    return <Badge className={`${colorMap[taskType] || 'bg-gray-500 border-gray-600'} text-white border`}>{taskType}</Badge>;
+    // Find the task type name from loaded types
+    const typeConfig = taskTypes.find((t) => t.type_id === taskType);
+    const displayName = typeConfig ? typeConfig.name : taskType;
+    return <Badge className={`${colorMap[taskType] || 'bg-gray-500 border-gray-600'} text-white border`}>{displayName}</Badge>;
   };
 
   const calculateDuration = (task: TaskSummary | TaskDetail): string => {
@@ -175,7 +193,7 @@ const TasksHistory: React.FC = () => {
 
     return (
       <TableRow>
-        <TableCell colSpan={5} className="p-0">
+        <TableCell colSpan={6} className="p-0">
           <div className="bg-gray-50 border-t border-gray-200 p-6 space-y-6">
             {/* Header with Collapse Button */}
             <div className="flex justify-between items-center pb-4 border-b border-gray-200">
@@ -198,7 +216,19 @@ const TasksHistory: React.FC = () => {
             ) : expandedTaskDetail ? (
               <>
                 {/* Metadata Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-4 border-b border-gray-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-4 border-b border-gray-200">
+                  <div>
+                    <h5 className="font-semibold text-gray-700 mb-3">Task Info</h5>
+                    <div className="space-y-2 text-sm">
+                      <div><span className="font-medium">Task Type:</span> {expandedTaskDetail.task_type || 'N/A'}</div>
+                      <div><span className="font-medium">Content Length:</span> {expandedTaskDetail.content?.length || 0} characters</div>
+                      <div><span className="font-medium">Has Result:</span> {expandedTaskDetail.result ? 'Yes' : 'No'}</div>
+                      {expandedTaskDetail.result && (
+                        <div><span className="font-medium">Result Length:</span> {(expandedTaskDetail.result as string).length} characters</div>
+                      )}
+                    </div>
+                  </div>
+
                   <div>
                     <h5 className="font-semibold text-gray-700 mb-3">Timing Information</h5>
                     <div className="space-y-2 text-sm">
@@ -210,7 +240,7 @@ const TasksHistory: React.FC = () => {
                       <div><span className="font-medium">Duration:</span> {calculateDuration(expandedTaskDetail)}</div>
                     </div>
                   </div>
-                  
+
                   <div>
                     <h5 className="font-semibold text-gray-700 mb-3">Retry Information</h5>
                     <div className="space-y-2 text-sm">
@@ -228,12 +258,14 @@ const TasksHistory: React.FC = () => {
                   </div>
 
                   <div>
-                    <h5 className="font-semibold text-gray-700 mb-3">Content Information</h5>
-                    <div className="space-y-2 text-sm">
-                      <div><span className="font-medium">Content Length:</span> {expandedTaskDetail.content?.length || 0} characters</div>
-                      <div><span className="font-medium">Has Result:</span> {expandedTaskDetail.result ? 'Yes' : 'No'}</div>
-                      {expandedTaskDetail.result && (
-                        <div><span className="font-medium">Result Length:</span> {expandedTaskDetail.result.length} characters</div>
+                    <h5 className="font-semibold text-gray-700 mb-3">Parameters</h5>
+                    <div className="text-sm">
+                      {expandedTaskDetail.params && Object.keys(expandedTaskDetail.params).length > 0 ? (
+                        <pre className="bg-gray-100 rounded p-2 text-xs overflow-auto max-h-32">
+                          {JSON.stringify(expandedTaskDetail.params, null, 2)}
+                        </pre>
+                      ) : (
+                        <span className="text-gray-500">No parameters</span>
                       )}
                     </div>
                   </div>
@@ -333,8 +365,11 @@ const TasksHistory: React.FC = () => {
           </SelectTrigger>
           <SelectContent className="bg-white border border-gray-300 shadow-lg">
             <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="summarize">Summarize</SelectItem>
-            <SelectItem value="pdfxtract">PDF Extract</SelectItem>
+            {taskTypes.map((type) => (
+              <SelectItem key={type.type_id} value={type.type_id}>
+                {type.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
