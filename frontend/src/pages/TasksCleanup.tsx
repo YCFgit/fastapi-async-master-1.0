@@ -1,62 +1,53 @@
 // frontend/src/pages/TasksCleanup.tsx
 import React from 'react';
 import { Trash2, AlertTriangle, Database } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
 
 const TasksCleanup: React.FC = () => {
+  const { t } = useI18n();
+
+  const features = [
+    { icon: Database, title: t('cleanup.dataTitle'), desc: t('cleanup.dataDesc'), color: 'var(--accent-blue)' },
+    { icon: AlertTriangle, title: t('cleanup.dlqTitle'), desc: t('cleanup.dlqDesc'), color: 'var(--accent-amber)' },
+    { icon: Trash2, title: t('cleanup.bulkTitle'), desc: t('cleanup.bulkDesc'), color: 'var(--accent-red)' },
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Tasks Cleanup</h1>
-          <p className="text-sm text-gray-600">
-            Manage and clean up old task data and failed tasks
-          </p>
-        </div>
+    <div className="space-y-6 animate-fade-in">
+      <div>
+        <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+          {t('cleanup.title')}
+        </h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+          {t('cleanup.desc')}
+        </p>
       </div>
 
-      {/* Placeholder Content */}
-      <div className="bg-white rounded-lg shadow p-8">
+      <div className="glass-card p-8">
         <div className="text-center">
-          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-gray-100">
-            <Trash2 className="h-6 w-6 text-gray-400" />
+          <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-xl" style={{ background: 'var(--accent-red-glow)', border: '1px solid rgba(255,71,87,0.2)' }}>
+            <Trash2 className="h-7 w-7" style={{ color: 'var(--accent-red)' }} />
           </div>
-          <h3 className="mt-4 text-lg font-medium text-gray-900">Tasks Cleanup</h3>
-          <p className="mt-2 text-sm text-gray-500 max-w-sm mx-auto">
-            This page will provide tools for cleaning up old task data, 
-            managing the dead letter queue, and maintaining system performance.
+          <h3 className="mt-4 text-lg font-semibold" style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+            {t('cleanup.heading')}
+          </h3>
+          <p className="mt-2 text-sm max-w-sm mx-auto" style={{ color: 'var(--text-secondary)' }}>
+            {t('cleanup.description')}
           </p>
-          
-          {/* Feature Preview */}
+
           <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <Database className="h-5 w-5 text-gray-400 mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-gray-900">Data Cleanup</h4>
-              <p className="text-xs text-gray-500 mt-1">
-                Remove old completed tasks and optimize storage
-              </p>
-            </div>
-            
-            <div className="bg-gray-50 rounded-lg p-4">
-              <AlertTriangle className="h-5 w-5 text-gray-400 mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-gray-900">DLQ Management</h4>
-              <p className="text-xs text-gray-500 mt-1">
-                Review and manage tasks in the dead letter queue
-              </p>
-            </div>
-            
-            <div className="bg-gray-50 rounded-lg p-4">
-              <Trash2 className="h-5 w-5 text-gray-400 mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-gray-900">Bulk Operations</h4>
-              <p className="text-xs text-gray-500 mt-1">
-                Perform bulk cleanup operations with safety checks
-              </p>
-            </div>
+            {features.map(({ icon: Icon, title, desc, color }) => (
+              <div key={title} className="rounded-lg p-4 transition-all duration-200 hover:scale-[1.02]" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-dim)' }}>
+                <Icon className="h-5 w-5 mx-auto mb-2" style={{ color }} />
+                <h4 className="text-sm font-medium" style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{title}</h4>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{desc}</p>
+              </div>
+            ))}
           </div>
-          
+
           <div className="mt-6">
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              Coming Soon
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'var(--accent-blue-glow)', border: '1px solid rgba(77,171,247,0.2)', color: 'var(--accent-blue)', fontFamily: 'var(--font-mono)' }}>
+              {t('cleanup.comingSoon')}
             </span>
           </div>
         </div>

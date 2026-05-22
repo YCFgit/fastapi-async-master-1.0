@@ -249,9 +249,23 @@ async def update_task_state(
             except (json.JSONDecodeError, TypeError, ValueError):
                 pass
 
+    # --- Fix #1: Append to state_history ---
+    state_history = []
+    if current_task_data.get("state_history"):
+        try:
+            state_history = json.loads(current_task_data["state_history"])
+        except (json.JSONDecodeError, TypeError):
+            state_history = []
+    state_history.append({
+        "from": old_state or "UNKNOWN",
+        "to": state,
+        "timestamp": current_time,
+    })
+    fields["state_history"] = json.dumps(state_history)
+
     # Serialize complex types
     for key, value in fields.items():
-        if isinstance(value, (dict, list)) and key != "error_history":
+        if isinstance(value, (dict, list)) and key not in ("error_history", "state_history"):
             fields[key] = json.dumps(value)
         elif value is not None:
             fields[key] = str(value)
@@ -259,6 +273,10 @@ async def update_task_state(
     # Update task data atomically
     async with redis_conn.pipeline(transaction=True) as pipe:
         await pipe.hset(f"task:{task_id}", mapping=fields)
+        # Fix #5: Set TTL on completed/DLQ tasks (default 24 hours = 86400s)
+        if state in ("COMPLETED", "DLQ"):
+            task_ttl = int(os.environ.get("TASK_RESULT_TTL", "86400"))
+            await pipe.expire(f"task:{task_id}", task_ttl)
         await pipe.execute()
 
     # Publish real-time update
@@ -408,6 +426,22 @@ def process_task(self: Task, task_id: str) -> str:
             http_status=str(result.http_status) if result.http_status else "",
             completed_at=datetime.now(UTC).isoformat(),
         )
+
+        # Fix #3: Fire callback URL if configured
+        callback_url = data.get("callback_url")
+        if callback_url:
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=10) as client:
+                    await client.post(callback_url, json={
+                        "task_id": task_id,
+                        "state": "COMPLETED",
+                        "result": result.result,
+                        "http_status": result.http_status,
+                        "completed_at": datetime.now(UTC).isoformat(),
+                    })
+            except Exception as cb_err:
+                print(f"Warning: Callback to {callback_url} failed: {cb_err}")
 
         # Update heartbeat at end of task
         await update_worker_heartbeat(redis_conn, worker_id)

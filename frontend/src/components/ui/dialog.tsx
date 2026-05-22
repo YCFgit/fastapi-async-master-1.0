@@ -1,3 +1,4 @@
+// frontend/src/components/ui/dialog.tsx
 import React from 'react';
 
 interface DialogProps {
@@ -32,8 +33,9 @@ export const Dialog: React.FC<DialogProps> = ({ open, onOpenChange, children }) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div 
-        className="fixed inset-0 bg-black bg-opacity-50" 
+      <div
+        className="fixed inset-0"
+        style={{ background: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)' }}
         onClick={() => onOpenChange(false)}
       />
       <div className="relative z-10">
@@ -45,7 +47,14 @@ export const Dialog: React.FC<DialogProps> = ({ open, onOpenChange, children }) 
 
 export const DialogContent: React.FC<DialogContentProps> = ({ children, className = '' }) => {
   return (
-    <div className={`bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4 ${className}`}>
+    <div
+      className={`rounded-xl shadow-2xl p-6 max-w-md w-full mx-4 ${className}`}
+      style={{
+        background: 'linear-gradient(135deg, var(--bg-elevated), var(--bg-secondary))',
+        border: '1px solid var(--border-default)',
+        backdropFilter: 'blur(16px)',
+      }}
+    >
       {children}
     </div>
   );
@@ -61,7 +70,10 @@ export const DialogHeader: React.FC<DialogHeaderProps> = ({ children }) => {
 
 export const DialogTitle: React.FC<DialogTitleProps> = ({ children }) => {
   return (
-    <h2 className="text-lg font-semibold text-gray-900">
+    <h2
+      className="text-lg font-semibold"
+      style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}
+    >
       {children}
     </h2>
   );
@@ -69,7 +81,10 @@ export const DialogTitle: React.FC<DialogTitleProps> = ({ children }) => {
 
 export const DialogDescription: React.FC<DialogDescriptionProps> = ({ children }) => {
   return (
-    <p className="text-sm text-gray-600 mt-2">
+    <p
+      className="text-sm mt-2"
+      style={{ color: 'var(--text-secondary)' }}
+    >
       {children}
     </p>
   );

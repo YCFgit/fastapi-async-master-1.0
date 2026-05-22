@@ -129,6 +129,13 @@ class TaskService:
         Returns:
             Dict with task_id and initial state.
         """
+        # Fix #4: Validate task_type exists and is enabled
+        type_config = await self.redis.hgetall(f"task_type:{request.task_type}")
+        if not type_config:
+            raise ValueError(f"Task type '{request.task_type}' not found. Please register it first.")
+        if type_config.get("enabled", "true") != "true":
+            raise ValueError(f"Task type '{request.task_type}' is disabled.")
+
         task_id = str(uuid4())
         now = datetime.utcnow().isoformat()
 
@@ -438,7 +445,8 @@ class TaskService:
             try:
                 return json.loads(val)
             except (json.JSONDecodeError, TypeError):
-                return None
+                # Return raw string if not valid JSON
+                return val
 
         error_history = _parse_json(data.get("error_history")) or []
         state_history = _parse_json(data.get("state_history")) or []
@@ -458,7 +466,7 @@ class TaskService:
             created_at=data.get("created_at", datetime.utcnow().isoformat()),
             updated_at=data.get("updated_at", datetime.utcnow().isoformat()),
             completed_at=data.get("completed_at"),
-            result=data.get("result"),
+            result=_parse_json(data.get("result")) if data.get("result") else data.get("result"),
             error_history=error_history,
             state_history=state_history,
         )

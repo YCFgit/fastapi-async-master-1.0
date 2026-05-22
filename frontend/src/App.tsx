@@ -1,5 +1,6 @@
 // frontend/src/App.tsx
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { I18nProvider } from './lib/i18n';
 import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import TasksHistory from './pages/TasksHistory';
@@ -9,16 +10,18 @@ import './App.css';
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="task-types" element={<TaskTypeManager />} />
-          <Route path="tasks-history" element={<TasksHistory />} />
-          <Route path="tasks-cleanup" element={<TasksCleanup />} />
-        </Route>
-      </Routes>
-    </Router>
+    <I18nProvider>
+      <Router>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="task-types" element={<TaskTypeManager />} />
+            <Route path="tasks-history" element={<TasksHistory />} />
+            <Route path="tasks-cleanup" element={<TasksCleanup />} />
+          </Route>
+        </Routes>
+      </Router>
+    </I18nProvider>
   );
 }
 

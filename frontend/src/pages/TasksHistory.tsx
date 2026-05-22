@@ -1,18 +1,24 @@
+// frontend/src/pages/TasksHistory.tsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { fetchTaskSummaries, fetchTaskDetail, deleteTask } from '@/lib/tasks-api';
 import { fetchTaskTypes } from '@/lib/task-types-api';
 import { TaskSummary, TaskSummaryListResponse, TaskDetail, TaskState, TaskTypeConfigResponse } from '@/lib/types';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+import { useI18n } from '@/lib/i18n';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { format } from 'date-fns';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronUp, Clock, Search, Trash2, Eye, EyeOff } from 'lucide-react';
+
+const inputStyle: React.CSSProperties = {
+  background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)',
+  color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '13px',
+  borderRadius: '8px', padding: '8px 12px', outline: 'none', transition: 'border-color 0.2s, box-shadow 0.2s',
+};
 
 const TasksHistory: React.FC = () => {
+  const { t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tasksResponse, setTasksResponse] = useState<TaskSummaryListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,297 +39,159 @@ const TasksHistory: React.FC = () => {
   });
 
   const loadTasks = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
-      const filterParams: Record<string, unknown> = { 
-        ...filters, 
-        page_size: 10,
-        sort_by: 'created_at',
-        sort_order: 'desc'
-      };
-      // Don't send status filter if "all" is selected
-      if (filters.status === 'all' || filters.status === '') {
-        filterParams.status = undefined;
-      }
-      // Don't send task_type filter if "all" is selected
-      if (filters.task_type === 'all' || filters.task_type === '') {
-        filterParams.task_type = undefined;
-      }
-      // Only send task_id if it has at least 1 character
-      if (filters.task_id && filters.task_id.trim().length > 0) {
-        filterParams.task_id = filters.task_id.trim();
-      } else {
-        filterParams.task_id = undefined;
-      }
+      const filterParams: Record<string, unknown> = { ...filters, page_size: 10, sort_by: 'created_at', sort_order: 'desc' };
+      if (filters.status === 'all' || filters.status === '') filterParams.status = undefined;
+      if (filters.task_type === 'all' || filters.task_type === '') filterParams.task_type = undefined;
+      if (filters.task_id && filters.task_id.trim().length > 0) filterParams.task_id = filters.task_id.trim();
+      else filterParams.task_id = undefined;
       const data = await fetchTaskSummaries(filterParams);
       setTasksResponse(data);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'An error occurred'); }
+    finally { setLoading(false); }
   }, [filters]);
 
   useEffect(() => {
     loadTasks();
-    setSearchParams(
-      Object.fromEntries(
-        Object.entries(filters).map(([key, value]) => [key, String(value)])
-      )
-    );
+    setSearchParams(Object.fromEntries(Object.entries(filters).map(([key, value]) => [key, String(value)])));
   }, [loadTasks, filters, setSearchParams]);
 
   useEffect(() => {
     const loadTaskTypes = async () => {
-      try {
-        const types = await fetchTaskTypes(false);
-        setTaskTypes(types);
-      } catch (error) {
-        console.error('Failed to load task types:', error);
-      }
+      try { setTaskTypes(await fetchTaskTypes(false)); } catch (e) { console.error('Failed to load task types:', e); }
     };
     loadTaskTypes();
   }, []);
 
-  const handleFilterChange = (key: string, value: string | number) => {
-    setFilters((prev) => ({ ...prev, [key]: value, page: 1 }));
-  };
+  const handleFilterChange = (key: string, value: string | number) => setFilters((prev) => ({ ...prev, [key]: value, page: 1 }));
+  const handlePageChange = (newPage: number) => setFilters((prev) => ({ ...prev, page: newPage }));
+  const shouldShowPagination = useMemo(() => tasksResponse && tasksResponse.total_pages > 1, [tasksResponse]);
 
-  const handlePageChange = (newPage: number) => {
-    setFilters((prev) => ({ ...prev, page: newPage }));
+  const getStateColor = (state: TaskState): string => {
+    const map: Record<string, string> = { PENDING: 'var(--text-muted)', ACTIVE: 'var(--accent-green)', COMPLETED: 'var(--accent-blue)', FAILED: 'var(--accent-amber)', SCHEDULED: 'var(--accent-purple)', DLQ: 'var(--accent-red)' };
+    return map[state] || 'var(--text-muted)';
   };
-
-  // Check if pagination should be shown
-  const shouldShowPagination = useMemo(() => {
-    return tasksResponse && tasksResponse.total_pages > 1;
-  }, [tasksResponse]);
 
   const renderStateBadge = (state: TaskState) => {
-    const colorMap: { [key in TaskState]: string } = {
-      [TaskState.PENDING]: 'bg-yellow-500 border-yellow-600',
-      [TaskState.ACTIVE]: 'bg-green-500 border-green-600',
-      [TaskState.COMPLETED]: 'bg-green-500 border-green-600',
-      [TaskState.FAILED]: 'bg-yellow-500 border-yellow-600',
-      [TaskState.SCHEDULED]: 'bg-yellow-500 border-yellow-600',
-      [TaskState.DLQ]: 'bg-red-500 border-red-600',
-    };
-    return <Badge className={`${colorMap[state]} text-white border`}>{state}</Badge>;
+    const color = getStateColor(state);
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style={{ background: `${color}18`, border: `1px solid ${color}33`, color, fontFamily: 'var(--font-mono)' }}>{t(`state.${state}`)}</span>;
   };
 
-  const getTaskType = (task: TaskSummary): string => {
-    // Return the task_type from the backend, which should handle the fallback logic
-    return task.task_type || 'summarize';
-  };
+  const getTaskType = (task: TaskSummary) => task.task_type || 'summarize';
 
   const renderTaskTypeBadge = (taskType: string) => {
-    const colorMap: { [key: string]: string } = {
-      'summarize': 'bg-blue-500 border-blue-600',
-      'pdfxtract': 'bg-purple-500 border-purple-600',
-      'translate': 'bg-teal-500 border-teal-600',
-    };
-    // Find the task type name from loaded types
     const typeConfig = taskTypes.find((t) => t.type_id === taskType);
-    const displayName = typeConfig ? typeConfig.name : taskType;
-    return <Badge className={`${colorMap[taskType] || 'bg-gray-500 border-gray-600'} text-white border`}>{displayName}</Badge>;
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" style={{ background: 'var(--accent-blue-glow)', border: '1px solid rgba(77,171,247,0.2)', color: 'var(--accent-blue)', fontFamily: 'var(--font-mono)' }}>{typeConfig ? typeConfig.name : taskType}</span>;
   };
 
   const calculateDuration = (task: TaskSummary | TaskDetail): string => {
-    if (task.completed_at) {
-      const duration = (new Date(task.completed_at).getTime() - new Date(task.created_at).getTime()) / 1000;
-      return `${duration}s`;
-    }
+    if (task.completed_at) return `${((new Date(task.completed_at).getTime() - new Date(task.created_at).getTime()) / 1000).toFixed(1)}s`;
     return 'N/A';
-  };
-
-  const handleDeleteClick = (task: TaskSummary) => {
-    setTaskToDelete(task);
-    setDeleteModalOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
     if (!taskToDelete) return;
-
     setDeleting(true);
-    try {
-      await deleteTask(taskToDelete.task_id);
-      setDeleteModalOpen(false);
-      setTaskToDelete(null);
-      // Reload tasks to reflect the deletion
-      await loadTasks();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to delete task');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteModalOpen(false);
-    setTaskToDelete(null);
+    try { await deleteTask(taskToDelete.task_id); setDeleteModalOpen(false); setTaskToDelete(null); await loadTasks(); }
+    catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed to delete task'); }
+    finally { setDeleting(false); }
   };
 
   const toggleTaskDetails = async (taskId: string) => {
-    if (expandedTaskId === taskId) {
-      // Collapse
-      setExpandedTaskId(null);
-      setExpandedTaskDetail(null);
-    } else {
-      // Expand
-      setExpandedTaskId(taskId);
-      setLoadingDetail(true);
-      try {
-        const detail = await fetchTaskDetail(taskId);
-        setExpandedTaskDetail(detail);
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch task details');
-      } finally {
-        setLoadingDetail(false);
-      }
+    if (expandedTaskId === taskId) { setExpandedTaskId(null); setExpandedTaskDetail(null); }
+    else {
+      setExpandedTaskId(taskId); setLoadingDetail(true);
+      try { setExpandedTaskDetail(await fetchTaskDetail(taskId)); }
+      catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed to fetch task details'); }
+      finally { setLoadingDetail(false); }
     }
-  };
-
-  const collapseTaskDetails = () => {
-    setExpandedTaskId(null);
-    setExpandedTaskDetail(null);
   };
 
   const renderTaskDetailsCard = (task: TaskSummary) => {
     if (expandedTaskId !== task.task_id) return null;
-
     return (
       <TableRow>
         <TableCell colSpan={6} className="p-0">
-          <div className="bg-gray-50 border-t border-gray-200 p-6 space-y-6">
-            {/* Header with Collapse Button */}
-            <div className="flex justify-between items-center pb-4 border-b border-gray-200">
-              <h4 className="font-semibold text-gray-700 text-lg">Task Details</h4>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={collapseTaskDetails}
-                className="flex items-center space-x-1"
-              >
-                <ChevronUp className="h-4 w-4" />
-                <span>Collapse</span>
-              </Button>
+          <div className="p-6 space-y-6" style={{ background: 'var(--bg-tertiary)', borderTop: '1px solid var(--border-dim)' }}>
+            <div className="flex justify-between items-center pb-4" style={{ borderBottom: '1px solid var(--border-dim)' }}>
+              <h4 className="font-semibold text-sm" style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{t('history.taskDetails')}</h4>
+              <button onClick={() => { setExpandedTaskId(null); setExpandedTaskDetail(null); }} className="flex items-center gap-1 px-2 py-1 rounded text-xs" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                <ChevronUp className="w-3 h-3" /> {t('history.collapse')}
+              </button>
             </div>
-
             {loadingDetail ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">Loading task details...</p>
-              </div>
+              <div className="text-center py-8"><p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{t('history.loadingDetails')}</p></div>
             ) : expandedTaskDetail ? (
               <>
-                {/* Metadata Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-4 border-b border-gray-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-4" style={{ borderBottom: '1px solid var(--border-dim)' }}>
                   <div>
-                    <h5 className="font-semibold text-gray-700 mb-3">Task Info</h5>
-                    <div className="space-y-2 text-sm">
-                      <div><span className="font-medium">Task Type:</span> {expandedTaskDetail.task_type || 'N/A'}</div>
-                      <div><span className="font-medium">Content Length:</span> {expandedTaskDetail.content?.length || 0} characters</div>
-                      <div><span className="font-medium">Has Result:</span> {expandedTaskDetail.result ? 'Yes' : 'No'}</div>
-                      {expandedTaskDetail.result != null && (
-                        <div><span className="font-medium">Result Length:</span> {String(expandedTaskDetail.result).length} characters</div>
-                      )}
+                    <h5 className="font-semibold text-xs mb-3" style={{ color: 'var(--accent-green)', fontFamily: 'var(--font-mono)' }}>{t('history.taskInfo')}</h5>
+                    <div className="space-y-2 text-xs" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                      <div><span style={{ color: 'var(--text-muted)' }}>{t('history.typeLabel')}</span> {expandedTaskDetail.task_type || 'N/A'}</div>
+                      <div><span style={{ color: 'var(--text-muted)' }}>{t('history.contentLabel')}</span> {expandedTaskDetail.content?.length || 0} chars</div>
+                      <div><span style={{ color: 'var(--text-muted)' }}>{t('history.hasResult')}</span> {expandedTaskDetail.result ? 'Yes' : 'No'}</div>
                     </div>
                   </div>
-
                   <div>
-                    <h5 className="font-semibold text-gray-700 mb-3">Timing Information</h5>
-                    <div className="space-y-2 text-sm">
-                      <div><span className="font-medium">Created:</span> {format(new Date(expandedTaskDetail.created_at), 'PPpp')}</div>
-                      <div><span className="font-medium">Updated:</span> {format(new Date(expandedTaskDetail.updated_at), 'PPpp')}</div>
-                      {expandedTaskDetail.completed_at && (
-                        <div><span className="font-medium">Completed:</span> {format(new Date(expandedTaskDetail.completed_at), 'PPpp')}</div>
-                      )}
-                      <div><span className="font-medium">Duration:</span> {calculateDuration(expandedTaskDetail)}</div>
+                    <h5 className="font-semibold text-xs mb-3" style={{ color: 'var(--accent-blue)', fontFamily: 'var(--font-mono)' }}>{t('history.timing')}</h5>
+                    <div className="space-y-2 text-xs" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                      <div><span style={{ color: 'var(--text-muted)' }}>{t('history.createdLabel')}</span> {format(new Date(expandedTaskDetail.created_at), 'PPpp')}</div>
+                      <div><span style={{ color: 'var(--text-muted)' }}>{t('history.updatedLabel')}</span> {format(new Date(expandedTaskDetail.updated_at), 'PPpp')}</div>
+                      {expandedTaskDetail.completed_at && <div><span style={{ color: 'var(--text-muted)' }}>{t('history.completedLabel')}</span> {format(new Date(expandedTaskDetail.completed_at), 'PPpp')}</div>}
+                      <div><span style={{ color: 'var(--text-muted)' }}>{t('history.durationLabel')}</span> {calculateDuration(expandedTaskDetail)}</div>
                     </div>
                   </div>
-
                   <div>
-                    <h5 className="font-semibold text-gray-700 mb-3">Retry Information</h5>
-                    <div className="space-y-2 text-sm">
-                      <div><span className="font-medium">Retry Count:</span> {expandedTaskDetail.retry_count} / {expandedTaskDetail.max_retries}</div>
-                      {expandedTaskDetail.retry_after && (
-                        <div><span className="font-medium">Retry After:</span> {format(new Date(expandedTaskDetail.retry_after), 'PPpp')}</div>
-                      )}
-                      {expandedTaskDetail.last_error && (
-                        <div><span className="font-medium">Last Error:</span> <span className="text-red-600 text-xs">{expandedTaskDetail.last_error}</span></div>
-                      )}
-                      {expandedTaskDetail.error_type && (
-                        <div><span className="font-medium">Error Type:</span> <span className="text-red-600 text-xs">{expandedTaskDetail.error_type}</span></div>
-                      )}
+                    <h5 className="font-semibold text-xs mb-3" style={{ color: 'var(--accent-amber)', fontFamily: 'var(--font-mono)' }}>{t('history.retryInfo')}</h5>
+                    <div className="space-y-2 text-xs" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                      <div><span style={{ color: 'var(--text-muted)' }}>{t('history.retryLabel')}</span> {expandedTaskDetail.retry_count} / {expandedTaskDetail.max_retries}</div>
+                      {expandedTaskDetail.last_error && <div><span style={{ color: 'var(--text-muted)' }}>{t('history.errorLabel')}</span> <span style={{ color: 'var(--accent-red)' }}>{expandedTaskDetail.last_error}</span></div>}
                     </div>
                   </div>
-
                   <div>
-                    <h5 className="font-semibold text-gray-700 mb-3">Parameters</h5>
-                    <div className="text-sm">
-                      {expandedTaskDetail.params && Object.keys(expandedTaskDetail.params).length > 0 ? (
-                        <pre className="bg-gray-100 rounded p-2 text-xs overflow-auto max-h-32">
-                          {JSON.stringify(expandedTaskDetail.params, null, 2)}
-                        </pre>
-                      ) : (
-                        <span className="text-gray-500">No parameters</span>
-                      )}
-                    </div>
+                    <h5 className="font-semibold text-xs mb-3" style={{ color: 'var(--accent-purple)', fontFamily: 'var(--font-mono)' }}>{t('history.params')}</h5>
+                    {expandedTaskDetail.params && Object.keys(expandedTaskDetail.params).length > 0 ? (
+                      <pre className="rounded p-2 text-xs overflow-auto max-h-32" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-dim)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{JSON.stringify(expandedTaskDetail.params, null, 2)}</pre>
+                    ) : <span className="text-xs" style={{ color: 'var(--text-dim)' }}>{t('history.noParams')}</span>}
                   </div>
                 </div>
-
-                {/* State History */}
                 <div>
-                  <h5 className="font-semibold text-gray-700 mb-3">State Transition History</h5>
-                  <div className="bg-white border border-gray-200 rounded-md p-4 max-h-48 overflow-y-auto">
+                  <h5 className="font-semibold text-xs mb-3" style={{ color: 'var(--accent-green)', fontFamily: 'var(--font-mono)' }}>{t('history.stateHistory')}</h5>
+                  <div className="rounded-md p-4 max-h-48 overflow-y-auto" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-dim)' }}>
                     <div className="space-y-2">
                       {expandedTaskDetail.state_history.map((entry, index) => (
-                        <div key={index} className="flex items-center justify-between py-1 border-b border-gray-100 last:border-b-0">
-                          <div className="flex items-center space-x-2">
-                            {renderStateBadge(entry.state as TaskState)}
-                          </div>
-                          <span className="text-sm text-gray-600">
-                            {format(new Date(entry.timestamp as string), 'PPpp')}
-                          </span>
+                        <div key={index} className="flex items-center justify-between py-1" style={{ borderBottom: index < expandedTaskDetail.state_history.length - 1 ? '1px solid var(--border-dim)' : 'none' }}>
+                          <div>{renderStateBadge(entry.state as TaskState)}</div>
+                          <span className="text-xs" style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{format(new Date(entry.timestamp as string), 'PPpp')}</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 </div>
-
-                {/* Error History */}
                 {expandedTaskDetail.error_history && expandedTaskDetail.error_history.length > 0 && (
                   <div>
-                    <h5 className="font-semibold text-gray-700 mb-3">Error History</h5>
-                    <div className="bg-white border border-gray-200 rounded-md p-4 max-h-48 overflow-y-auto">
-                      <div className="space-y-3">
-                        {expandedTaskDetail.error_history.map((error, index) => (
-                          <div key={index} className="p-3 bg-red-50 border border-red-200 rounded-md">
-                            <div className="text-sm">
-                              <div className="font-medium text-red-800">Error #{index + 1}</div>
-                              <pre className="text-xs text-red-700 mt-1 whitespace-pre-wrap">{JSON.stringify(error, null, 2)}</pre>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                    <h5 className="font-semibold text-xs mb-3" style={{ color: 'var(--accent-red)', fontFamily: 'var(--font-mono)' }}>{t('history.errorHistory')}</h5>
+                    <div className="space-y-3">
+                      {expandedTaskDetail.error_history.map((error, index) => (
+                        <div key={index} className="p-3 rounded-md" style={{ background: 'var(--accent-red-glow)', border: '1px solid rgba(255,71,87,0.2)' }}>
+                          <div className="text-xs"><div className="font-medium" style={{ color: 'var(--accent-red)', fontFamily: 'var(--font-mono)' }}>Error #{index + 1}</div>
+                          <pre className="text-xs mt-1 whitespace-pre-wrap" style={{ color: 'var(--accent-red)', fontFamily: 'var(--font-mono)' }}>{JSON.stringify(error, null, 2)}</pre></div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
-
-                {/* Result Section - Only for completed tasks */}
                 {expandedTaskDetail.state === TaskState.COMPLETED && expandedTaskDetail.result && (
                   <div>
-                    <h5 className="font-semibold text-gray-700 mb-3">Task Result</h5>
-                    <div className="bg-white border border-gray-200 rounded-md p-4 max-h-64 overflow-y-auto">
-                      <pre className="text-sm whitespace-pre-wrap text-gray-800">{String(expandedTaskDetail.result)}</pre>
+                    <h5 className="font-semibold text-xs mb-3" style={{ color: 'var(--accent-green)', fontFamily: 'var(--font-mono)' }}>{t('history.taskResult')}</h5>
+                    <div className="rounded-md p-4 max-h-64 overflow-y-auto" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-dim)' }}>
+                      <pre className="text-sm whitespace-pre-wrap" style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{String(expandedTaskDetail.result)}</pre>
                     </div>
                   </div>
                 )}
               </>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-red-500">Failed to load task details</p>
-              </div>
-            )}
+            ) : <div className="text-center py-8"><p style={{ color: 'var(--accent-red)', fontFamily: 'var(--font-mono)' }}>{t('history.failedDetails')}</p></div>}
           </div>
         </TableCell>
       </TableRow>
@@ -331,179 +199,105 @@ const TasksHistory: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Tasks History</h1>
-      <div className="flex items-center space-x-4">
-        <Input
-          placeholder="Search by Task ID..."
-          value={filters.task_id}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterChange('task_id', e.target.value)}
-          className="max-w-sm"
-        />
-        <Select
-          value={filters.status}
-          onValueChange={(value: string) => handleFilterChange('status', value)}
-        >
-          <SelectTrigger className="w-[180px] bg-white border border-gray-300">
-            <SelectValue placeholder="Filter by Status" />
-          </SelectTrigger>
-          <SelectContent className="bg-white border border-gray-300 shadow-lg">
-            <SelectItem value="all">All Statuses</SelectItem>
-            {Object.values(TaskState).map((state) => (
-              <SelectItem key={state} value={state}>
-                {state}
-              </SelectItem>
-            ))}
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex items-center gap-3">
+        <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{t('history.title')}</h1>
+        <Clock className="w-4 h-4" style={{ color: 'var(--accent-blue)' }} />
+      </div>
+
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Search className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+          <input placeholder={t('history.search')} value={filters.task_id} onChange={(e) => handleFilterChange('task_id', e.target.value)} style={{ ...inputStyle, maxWidth: '320px' }} />
+        </div>
+        <Select value={filters.status} onValueChange={(v: string) => handleFilterChange('status', v)}>
+          <SelectTrigger className="w-[180px]" style={{ ...inputStyle, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } as React.CSSProperties}><SelectValue placeholder={t('history.filterStatus')} /></SelectTrigger>
+          <SelectContent style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '8px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 9999 }}>
+            <SelectItem value="all" style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>{t('history.allStatuses')}</SelectItem>
+            {Object.values(TaskState).map((state) => <SelectItem key={state} value={state} style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>{t(`state.${state}`)}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select
-          value={filters.task_type}
-          onValueChange={(value: string) => handleFilterChange('task_type', value)}
-        >
-          <SelectTrigger className="w-[180px] bg-white border border-gray-300">
-            <SelectValue placeholder="Filter by Type" />
-          </SelectTrigger>
-          <SelectContent className="bg-white border border-gray-300 shadow-lg">
-            <SelectItem value="all">All Types</SelectItem>
-            {taskTypes.map((type) => (
-              <SelectItem key={type.type_id} value={type.type_id}>
-                {type.name}
-              </SelectItem>
-            ))}
+        <Select value={filters.task_type} onValueChange={(v: string) => handleFilterChange('task_type', v)}>
+          <SelectTrigger className="w-[180px]" style={{ ...inputStyle, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } as React.CSSProperties}><SelectValue placeholder={t('history.filterType')} /></SelectTrigger>
+          <SelectContent style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '8px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 9999 }}>
+            <SelectItem value="all" style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>{t('history.allTypes')}</SelectItem>
+            {taskTypes.map((type) => <SelectItem key={type.type_id} value={type.type_id} style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>{type.name}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
 
-      {loading && <p>Loading...</p>}
-      {error && <p className="text-red-500">{error}</p>}
+      {loading && <p className="text-sm" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{t('history.loading')}</p>}
+      {error && <p className="text-sm" style={{ color: 'var(--accent-red)', fontFamily: 'var(--font-mono)' }}>{error}</p>}
 
       {tasksResponse && (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Task ID</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Task Type</TableHead>
-                <TableHead>Created At</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {tasksResponse.tasks.map((task: TaskSummary) => (
-                <React.Fragment key={task.task_id}>
-                  <TableRow className={expandedTaskId === task.task_id ? 'bg-blue-50' : ''}>
-                    <TableCell className="font-mono text-xs">{task.task_id}</TableCell>
-                    <TableCell>{renderStateBadge(task.state)}</TableCell>
-                    <TableCell>{renderTaskTypeBadge(getTaskType(task))}</TableCell>
-                    <TableCell>{format(new Date(task.created_at), 'PPpp')}</TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => toggleTaskDetails(task.task_id)}
-                          className="flex items-center space-x-1"
-                        >
-                          {expandedTaskId === task.task_id ? (
-                            <>
-                              <ChevronUp className="h-4 w-4" />
-                              <span>Hide Details</span>
-                            </>
-                          ) : (
-                            <>
-                              <ChevronDown className="h-4 w-4" />
-                              <span>View Details</span>
-                            </>
-                          )}
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => handleDeleteClick(task)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-300 hover:border-red-400"
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                  {renderTaskDetailsCard(task)}
-                </React.Fragment>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-dim)' }}>
+            <Table>
+              <TableHeader>
+                <TableRow style={{ borderBottom: '1px solid var(--border-dim)' }}>
+                  <TableHead style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{t('history.taskId')}</TableHead>
+                  <TableHead style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{t('history.status')}</TableHead>
+                  <TableHead style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{t('history.type')}</TableHead>
+                  <TableHead style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{t('history.created')}</TableHead>
+                  <TableHead style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{t('history.actions')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tasksResponse.tasks.map((task: TaskSummary) => (
+                  <React.Fragment key={task.task_id}>
+                    <TableRow style={{ borderBottom: '1px solid var(--border-dim)', background: expandedTaskId === task.task_id ? 'var(--bg-elevated)' : 'transparent' }}>
+                      <TableCell><span className="text-xs" style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{task.task_id.substring(0, 8)}...</span></TableCell>
+                      <TableCell>{renderStateBadge(task.state)}</TableCell>
+                      <TableCell>{renderTaskTypeBadge(getTaskType(task))}</TableCell>
+                      <TableCell><span className="text-xs" style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{format(new Date(task.created_at), 'MMM dd HH:mm')}</span></TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <button onClick={() => toggleTaskDetails(task.task_id)} className="flex items-center gap-1 px-2 py-1 rounded text-xs" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                            {expandedTaskId === task.task_id ? <><EyeOff className="w-3 h-3" /> {t('history.hide')}</> : <><Eye className="w-3 h-3" /> {t('history.view')}</>}
+                          </button>
+                          <button onClick={() => { setTaskToDelete(task); setDeleteModalOpen(true); }} className="flex items-center gap-1 px-2 py-1 rounded text-xs" style={{ background: 'var(--accent-red-glow)', border: '1px solid rgba(255,71,87,0.2)', color: 'var(--accent-red)', fontFamily: 'var(--font-mono)' }}>
+                            <Trash2 className="w-3 h-3" /> {t('history.delete')}
+                          </button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {renderTaskDetailsCard(task)}
+                  </React.Fragment>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
           <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-600">
+            <p className="text-xs" style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
               {(() => {
-                const totalTasks = tasksResponse.total_items;
-                const actualTasksOnPage = tasksResponse.tasks.length;
-                const currentPage = tasksResponse.page;
-                const pageSize = tasksResponse.page_size;
-                
-                if (totalTasks === 0) {
-                  return "No tasks found";
-                }
-                
-                // Calculate the actual start position for this page
-                // The backend handles pagination correctly, so we can trust the page info
-                const startLine = ((currentPage - 1) * pageSize) + 1;
-                const endLine = startLine + actualTasksOnPage - 1;
-                
-                if (actualTasksOnPage === 1) {
-                  return `Showing task ${startLine} of ${totalTasks}`;
-                }
-                
-                return `Showing tasks ${startLine}-${endLine} of ${totalTasks}`;
+                const total = tasksResponse.total_items; const onPage = tasksResponse.tasks.length; const pg = tasksResponse.page; const sz = tasksResponse.page_size;
+                if (total === 0) return t('history.noTasks');
+                const start = ((pg - 1) * sz) + 1; const end = start + onPage - 1;
+                if (onPage === 1) return t('history.showingSingle', { start, total });
+                return t('history.showingRange', { start, end, total });
               })()}
             </p>
             {shouldShowPagination && (
-              <div className="flex items-center space-x-2">
-                <Button
-                  onClick={() => handlePageChange(filters.page - 1)}
-                  disabled={filters.page <= 1}
-                >
-                  Previous
-                </Button>
-                <Button
-                  onClick={() => handlePageChange(filters.page + 1)}
-                  disabled={filters.page >= tasksResponse.total_pages}
-                >
-                  Next
-                </Button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => handlePageChange(filters.page - 1)} disabled={filters.page <= 1} className="px-3 py-1.5 rounded-lg text-xs" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', color: filters.page <= 1 ? 'var(--text-dim)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', cursor: filters.page <= 1 ? 'not-allowed' : 'pointer', opacity: filters.page <= 1 ? 0.5 : 1 }}>{t('history.previous')}</button>
+                <span className="text-xs" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{t('history.pageInfo', { current: filters.page, total: tasksResponse.total_pages })}</span>
+                <button onClick={() => handlePageChange(filters.page + 1)} disabled={filters.page >= tasksResponse.total_pages} className="px-3 py-1.5 rounded-lg text-xs" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', color: filters.page >= tasksResponse.total_pages ? 'var(--text-dim)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', cursor: filters.page >= tasksResponse.total_pages ? 'not-allowed' : 'pointer', opacity: filters.page >= tasksResponse.total_pages ? 0.5 : 1 }}>{t('history.next')}</button>
               </div>
             )}
           </div>
         </>
       )}
 
-      {/* Delete Confirmation Modal */}
       <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Task</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete task <span className="font-mono text-sm">{taskToDelete?.task_id}</span>?
-              <br />
-              <br />
-              This will permanently remove the task from all Redis queues, states, and statistics. This action cannot be undone.
-            </DialogDescription>
+            <DialogTitle>{t('history.deleteTitle')}</DialogTitle>
+            <DialogDescription>{t('history.deleteConfirm')} <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-red)' }}>{taskToDelete?.task_id}</span>?<br /><br />{t('history.deleteDesc')}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={handleDeleteCancel}
-              disabled={deleting}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleDeleteConfirm}
-              disabled={deleting}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              {deleting ? 'Deleting...' : 'Delete Task'}
-            </Button>
+            <button onClick={() => setDeleteModalOpen(false)} disabled={deleting} className="px-4 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{t('history.cancel')}</button>
+            <button onClick={handleDeleteConfirm} disabled={deleting} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: deleting ? 'var(--bg-tertiary)' : 'linear-gradient(135deg, var(--accent-red-dim), var(--accent-red))', color: deleting ? 'var(--text-muted)' : '#fff', fontFamily: 'var(--font-mono)', boxShadow: deleting ? 'none' : '0 0 16px rgba(255,71,87,0.2)' }}>{deleting ? t('history.deleting') : t('history.deleteTitle')}</button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

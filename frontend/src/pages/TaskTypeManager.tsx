@@ -15,32 +15,87 @@ import {
   deactivateTaskType,
   testTaskType,
 } from '@/lib/task-types-api';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Settings, Plus, TestTube, Edit3, Power, Trash2, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
+
+// Terminal-style input
+const TermInput: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label?: string }> = ({ label, ...props }) => (
+  <div>
+    {label && (
+      <label className="block text-xs mb-1.5" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+        {label}
+      </label>
+    )}
+    <input
+      {...props}
+      style={{
+        background: 'var(--bg-tertiary)',
+        border: '1px solid var(--border-default)',
+        color: 'var(--text-primary)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: '13px',
+        borderRadius: '8px',
+        padding: '8px 12px',
+        outline: 'none',
+        width: '100%',
+        transition: 'border-color 0.2s, box-shadow 0.2s',
+        ...props.style,
+      }}
+      onFocus={(e) => {
+        e.target.style.borderColor = 'var(--accent-green)';
+        e.target.style.boxShadow = '0 0 0 2px var(--accent-green-glow)';
+        props.onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        e.target.style.borderColor = 'var(--border-default)';
+        e.target.style.boxShadow = 'none';
+        props.onBlur?.(e);
+      }}
+    />
+  </div>
+);
+
+// Terminal-style select
+const TermSelect: React.FC<{
+  label?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}> = ({ label, value, onChange, options }) => (
+  <div>
+    {label && (
+      <label className="block text-xs mb-1.5" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+        {label}
+      </label>
+    )}
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        background: 'var(--bg-tertiary)',
+        border: '1px solid var(--border-default)',
+        color: 'var(--text-primary)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: '13px',
+        borderRadius: '8px',
+        padding: '8px 12px',
+        outline: 'none',
+        width: '100%',
+        cursor: 'pointer',
+        appearance: 'none' as const,
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b9ab5' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+        backgroundRepeat: 'no-repeat',
+        backgroundPosition: 'right 12px center',
+        paddingRight: '32px',
+      }}
+    >
+      {options.map((opt) => (
+        <option key={opt.value} value={opt.value}>{opt.label}</option>
+      ))}
+    </select>
+  </div>
+);
 
 const defaultFormData: TaskTypeConfig = {
   type_id: '',
@@ -66,23 +121,21 @@ const defaultFormData: TaskTypeConfig = {
 };
 
 const TaskTypeManager: React.FC = () => {
+  const { t } = useI18n();
   const [taskTypes, setTaskTypes] = useState<TaskTypeConfigResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Form state
   const [formOpen, setFormOpen] = useState(false);
   const [editingType, setEditingType] = useState<TaskTypeConfigResponse | null>(null);
   const [formData, setFormData] = useState<TaskTypeConfig>({ ...defaultFormData });
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Delete confirmation
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [typeToDelete, setTypeToDelete] = useState<TaskTypeConfigResponse | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Test result
   const [testModalOpen, setTestModalOpen] = useState(false);
   const [testResult, setTestResult] = useState<TaskTypeTestResult | null>(null);
   const [testing, setTesting] = useState(false);
@@ -101,9 +154,7 @@ const TaskTypeManager: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    loadTaskTypes();
-  }, [loadTaskTypes]);
+  useEffect(() => { loadTaskTypes(); }, [loadTaskTypes]);
 
   const handleOpenCreate = () => {
     setEditingType(null);
@@ -123,12 +174,6 @@ const TaskTypeManager: React.FC = () => {
     setFormOpen(true);
   };
 
-  const handleFormClose = () => {
-    setFormOpen(false);
-    setEditingType(null);
-    setFormError(null);
-  };
-
   const handleFormChange = (field: string, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -136,7 +181,6 @@ const TaskTypeManager: React.FC = () => {
   const handleSubmit = async () => {
     setSubmitting(true);
     setFormError(null);
-
     try {
       if (editingType) {
         await updateTaskType(editingType.type_id, formData);
@@ -152,14 +196,8 @@ const TaskTypeManager: React.FC = () => {
     }
   };
 
-  const handleDeleteClick = (taskType: TaskTypeConfigResponse) => {
-    setTypeToDelete(taskType);
-    setDeleteModalOpen(true);
-  };
-
   const handleDeleteConfirm = async () => {
     if (!typeToDelete) return;
-
     setDeleting(true);
     try {
       await deleteTaskType(typeToDelete.type_id);
@@ -191,7 +229,6 @@ const TaskTypeManager: React.FC = () => {
     setTestResult(null);
     setTesting(true);
     setTestModalOpen(true);
-
     try {
       const result = await testTaskType(typeId);
       setTestResult(result);
@@ -205,141 +242,219 @@ const TaskTypeManager: React.FC = () => {
     }
   };
 
-  const renderAuthTypeBadge = (authType: AuthType) => {
-    const colorMap: Record<AuthType, string> = {
-      [AuthType.NONE]: 'bg-gray-500 border-gray-600',
-      [AuthType.BEARER]: 'bg-blue-500 border-blue-600',
-      [AuthType.API_KEY]: 'bg-purple-500 border-purple-600',
-      [AuthType.BASIC]: 'bg-orange-500 border-orange-600',
+  const getAuthColor = (authType: AuthType) => {
+    const map: Record<string, string> = {
+      NONE: 'var(--text-muted)',
+      BEARER: 'var(--accent-blue)',
+      API_KEY: 'var(--accent-purple)',
+      BASIC: 'var(--accent-amber)',
     };
-    return (
-      <Badge className={`${colorMap[authType]} text-white border`}>{authType}</Badge>
-    );
-  };
-
-  const renderStatusBadge = (enabled: boolean) => {
-    return enabled ? (
-      <Badge className="bg-green-500 border-green-600 text-white border">Active</Badge>
-    ) : (
-      <Badge className="bg-gray-500 border-gray-600 text-white border">Inactive</Badge>
-    );
+    return map[authType] || 'var(--text-muted)';
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Task Types</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Manage task type configurations for external API integrations
-          </p>
+        <div className="flex items-center gap-3">
+          <h1
+            className="text-xl font-bold"
+            style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}
+          >
+            {t('types.title')}
+          </h1>
+          <Settings className="w-4 h-4" style={{ color: 'var(--accent-blue)' }} />
         </div>
-        <Button onClick={handleOpenCreate} className="bg-blue-600 hover:bg-blue-700 text-white">
-          Register New Type
-        </Button>
+        <button
+          onClick={handleOpenCreate}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200"
+          style={{
+            background: 'linear-gradient(135deg, var(--accent-green-dim), var(--accent-green))',
+            color: '#000',
+            fontFamily: 'var(--font-mono)',
+            boxShadow: '0 0 16px rgba(0, 255, 136, 0.2)',
+          }}
+        >
+          <Plus className="w-4 h-4" />
+          {t('types.register')}
+        </button>
       </div>
 
-      {/* Error display */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-700">{error}</p>
+        <div
+          className="flex items-center gap-2 px-4 py-3 rounded-lg"
+          style={{
+            background: 'var(--accent-red-glow)',
+            border: '1px solid rgba(255,71,87,0.2)',
+            color: 'var(--accent-red)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '13px',
+          }}
+        >
+          <XCircle className="w-4 h-4" />
+          {error}
         </div>
       )}
 
-      {/* Loading state */}
       {loading && (
         <div className="text-center py-8">
-          <p className="text-gray-500">Loading task types...</p>
+          <Loader2 className="w-8 h-8 mx-auto animate-spin" style={{ color: 'var(--accent-green)' }} />
+          <p className="text-sm mt-2" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            {t('types.loading')}
+          </p>
         </div>
       )}
 
       {/* Table */}
       {!loading && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Type ID</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Method</TableHead>
-                <TableHead>Auth Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{
+            background: 'var(--bg-tertiary)',
+            border: '1px solid var(--border-dim)',
+          }}
+        >
+          <table className="w-full text-sm" style={{ fontFamily: 'var(--font-mono)' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border-dim)' }}>
+                <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{t('types.typeId')}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{t('types.name')}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{t('types.method')}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{t('types.auth')}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{t('types.status')}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{t('types.actions')}</th>
+              </tr>
+            </thead>
+            <tbody>
               {taskTypes.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                    No task types registered. Click "Register New Type" to create one.
-                  </TableCell>
-                </TableRow>
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm" style={{ color: 'var(--text-dim)' }}>
+                    {t('types.empty')}
+                  </td>
+                </tr>
               ) : (
                 taskTypes.map((taskType) => (
-                  <TableRow key={taskType.type_id}>
-                    <TableCell className="font-mono text-sm">{taskType.type_id}</TableCell>
-                    <TableCell>
+                  <tr
+                    key={taskType.type_id}
+                    className="transition-colors"
+                    style={{ borderBottom: '1px solid var(--border-dim)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-elevated)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-primary)' }}>
+                      {taskType.type_id}
+                    </td>
+                    <td className="px-4 py-3">
                       <div>
-                        <div className="font-medium">{taskType.name}</div>
+                        <div className="text-sm" style={{ color: 'var(--text-primary)' }}>{taskType.name}</div>
                         {taskType.description && (
-                          <div className="text-xs text-gray-500 mt-1 truncate max-w-xs">
+                          <div className="text-xs mt-0.5 truncate max-w-xs" style={{ color: 'var(--text-dim)' }}>
                             {taskType.description}
                           </div>
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="font-mono">
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded text-xs"
+                        style={{
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border-default)',
+                          color: 'var(--text-secondary)',
+                        }}
+                      >
                         {taskType.http_method}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{renderAuthTypeBadge(taskType.auth_type)}</TableCell>
-                    <TableCell>{renderStatusBadge(taskType.enabled)}</TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded text-xs"
+                        style={{
+                          background: `${getAuthColor(taskType.auth_type)}18`,
+                          border: `1px solid ${getAuthColor(taskType.auth_type)}33`,
+                          color: getAuthColor(taskType.auth_type),
+                        }}
+                      >
+                        {taskType.auth_type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded text-xs"
+                        style={{
+                          background: taskType.enabled ? 'var(--accent-green-glow)' : 'var(--bg-elevated)',
+                          border: `1px solid ${taskType.enabled ? 'rgba(0,255,136,0.2)' : 'var(--border-default)'}`,
+                          color: taskType.enabled ? 'var(--accent-green)' : 'var(--text-muted)',
+                        }}
+                      >
+                        {taskType.enabled ? t('types.active') : t('types.inactive')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2">
+                        <button
                           onClick={() => handleTest(taskType.type_id)}
                           disabled={testing && testTypeId === taskType.type_id}
+                          className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors"
+                          style={{
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border-default)',
+                            color: 'var(--accent-blue)',
+                            fontFamily: 'var(--font-mono)',
+                          }}
                         >
-                          {testing && testTypeId === taskType.type_id ? 'Testing...' : 'Test'}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
+                          {testing && testTypeId === taskType.type_id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <TestTube className="w-3 h-3" />
+                          )}
+                          {t('types.test')}
+                        </button>
+                        <button
                           onClick={() => handleOpenEdit(taskType)}
+                          className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors"
+                          style={{
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border-default)',
+                            color: 'var(--text-secondary)',
+                            fontFamily: 'var(--font-mono)',
+                          }}
                         >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
+                          <Edit3 className="w-3 h-3" />
+                          {t('types.edit')}
+                        </button>
+                        <button
                           onClick={() => handleToggleActive(taskType)}
-                          className={
-                            taskType.enabled
-                              ? 'text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-300'
-                              : 'text-green-600 hover:text-green-700 hover:bg-green-50 border-green-300'
-                          }
+                          className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors"
+                          style={{
+                            background: taskType.enabled ? 'var(--accent-amber-glow)' : 'var(--accent-green-glow)',
+                            border: `1px solid ${taskType.enabled ? 'rgba(255,184,0,0.2)' : 'rgba(0,255,136,0.2)'}`,
+                            color: taskType.enabled ? 'var(--accent-amber)' : 'var(--accent-green)',
+                            fontFamily: 'var(--font-mono)',
+                          }}
                         >
-                          {taskType.enabled ? 'Deactivate' : 'Activate'}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteClick(taskType)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-300 hover:border-red-400"
+                          <Power className="w-3 h-3" />
+                          {taskType.enabled ? t('types.deactivate') : t('types.activate')}
+                        </button>
+                        <button
+                          onClick={() => { setTypeToDelete(taskType); setDeleteModalOpen(true); }}
+                          className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors"
+                          style={{
+                            background: 'var(--accent-red-glow)',
+                            border: '1px solid rgba(255,71,87,0.2)',
+                            color: 'var(--accent-red)',
+                            fontFamily: 'var(--font-mono)',
+                          }}
                         >
-                          Delete
-                        </Button>
+                          <Trash2 className="w-3 h-3" />
+                        </button>
                       </div>
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))
               )}
-            </TableBody>
-          </Table>
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -348,329 +463,166 @@ const TaskTypeManager: React.FC = () => {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingType ? `Edit Task Type: ${editingType.type_id}` : 'Register New Task Type'}
+              {editingType ? t('types.editTitle', { id: editingType.type_id }) : t('types.createTitle')}
             </DialogTitle>
             <DialogDescription>
-              {editingType
-                ? 'Update the task type configuration below.'
-                : 'Configure a new task type for external API integration.'}
+              {editingType ? t('types.editDesc') : t('types.createDesc')}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="space-y-5 py-4">
             {formError && (
-              <div className="bg-red-50 border border-red-200 rounded p-3">
-                <p className="text-red-700 text-sm">{formError}</p>
+              <div
+                className="flex items-center gap-2 p-3 rounded-lg text-xs"
+                style={{
+                  background: 'var(--accent-red-glow)',
+                  border: '1px solid rgba(255,71,87,0.2)',
+                  color: 'var(--accent-red)',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                <XCircle className="w-4 h-4" />
+                {formError}
               </div>
             )}
 
             {/* Basic Info */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Type ID *
-                </label>
-                <Input
-                  value={formData.type_id}
-                  onChange={(e) => handleFormChange('type_id', e.target.value)}
-                  placeholder="e.g., translate"
-                  disabled={!!editingType}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Name *
-                </label>
-                <Input
-                  value={formData.name}
-                  onChange={(e) => handleFormChange('name', e.target.value)}
-                  placeholder="e.g., Text Translation"
-                />
-              </div>
-            </div>
-
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
-              <Input
-                value={formData.description || ''}
-                onChange={(e) => handleFormChange('description', e.target.value)}
-                placeholder="Optional description"
-              />
+              <h3 className="text-xs font-semibold mb-3" style={{ color: 'var(--accent-green)', fontFamily: 'var(--font-mono)' }}>
+                {t('types.basicInfo')}
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <TermInput label={t('types.typeIdLabel')} value={formData.type_id} onChange={(e) => handleFormChange('type_id', e.target.value)} placeholder={t('types.placeholder.typeId')} disabled={!!editingType} />
+                <TermInput label={t('types.nameLabel')} value={formData.name} onChange={(e) => handleFormChange('name', e.target.value)} placeholder={t('types.placeholder.name')} />
+              </div>
+              <div className="mt-3">
+                <TermInput label={t('types.descLabel')} value={formData.description || ''} onChange={(e) => handleFormChange('description', e.target.value)} placeholder={t('types.placeholder.desc')} />
+              </div>
             </div>
 
             {/* API Configuration */}
-            <div className="border-t pt-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">API Configuration</h3>
+            <div style={{ borderTop: '1px solid var(--border-dim)', paddingTop: '16px' }}>
+              <h3 className="text-xs font-semibold mb-3" style={{ color: 'var(--accent-blue)', fontFamily: 'var(--font-mono)' }}>
+                {t('types.apiConfig')}
+              </h3>
               <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    API Base URL *
-                  </label>
-                  <Input
-                    value={formData.api_base_url}
-                    onChange={(e) => handleFormChange('api_base_url', e.target.value)}
-                    placeholder="https://api.example.com"
-                  />
-                </div>
+                <TermInput label={t('types.baseUrlLabel')} value={formData.api_base_url} onChange={(e) => handleFormChange('api_base_url', e.target.value)} placeholder={t('types.placeholder.baseUrl')} />
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      API Endpoint *
-                    </label>
-                    <Input
-                      value={formData.api_endpoint}
-                      onChange={(e) => handleFormChange('api_endpoint', e.target.value)}
-                      placeholder="/v1/translate"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      HTTP Method
-                    </label>
-                    <Select
-                      value={formData.http_method}
-                      onValueChange={(value) => handleFormChange('http_method', value)}
-                    >
-                      <SelectTrigger className="bg-white border border-gray-300">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white border border-gray-300 shadow-lg">
-                        {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((method) => (
-                          <SelectItem key={method} value={method}>
-                            {method}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <TermInput label={t('types.endpointLabel')} value={formData.api_endpoint} onChange={(e) => handleFormChange('api_endpoint', e.target.value)} placeholder={t('types.placeholder.endpoint')} />
+                  <TermSelect
+                    label={t('types.methodLabel')}
+                    value={formData.http_method}
+                    onChange={(v) => handleFormChange('http_method', v)}
+                    options={['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(m => ({ value: m, label: m }))}
+                  />
                 </div>
               </div>
             </div>
 
             {/* Authentication */}
-            <div className="border-t pt-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Authentication</h3>
+            <div style={{ borderTop: '1px solid var(--border-dim)', paddingTop: '16px' }}>
+              <h3 className="text-xs font-semibold mb-3" style={{ color: 'var(--accent-purple)', fontFamily: 'var(--font-mono)' }}>
+                {t('types.authentication')}
+              </h3>
               <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Auth Type
-                  </label>
-                  <Select
-                    value={formData.auth_type}
-                    onValueChange={(value) => handleFormChange('auth_type', value)}
-                  >
-                    <SelectTrigger className="bg-white border border-gray-300">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white border border-gray-300 shadow-lg">
-                      {Object.values(AuthType).map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
+                <TermSelect
+                  label={t('types.authTypeLabel')}
+                  value={formData.auth_type}
+                  onChange={(v) => handleFormChange('auth_type', v)}
+                  options={Object.values(AuthType).map(t => ({ value: t, label: t }))}
+                />
                 {formData.auth_type === AuthType.BEARER && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Bearer Token
-                    </label>
-                    <Input
-                      type="password"
-                      value={formData.auth_config?.token || ''}
-                      onChange={(e) =>
-                        handleFormChange('auth_config', { token: e.target.value })
-                      }
-                      placeholder="Enter bearer token or ${ENV_VAR}"
-                    />
-                  </div>
+                  <TermInput label={t('types.bearerToken')} type="password" value={formData.auth_config?.token || ''} onChange={(e) => handleFormChange('auth_config', { token: e.target.value })} placeholder={t('types.placeholder.token')} />
                 )}
-
                 {formData.auth_type === AuthType.API_KEY && (
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Header Name
-                      </label>
-                      <Input
-                        value={formData.auth_config?.header_name || ''}
-                        onChange={(e) =>
-                          handleFormChange('auth_config', {
-                            ...formData.auth_config,
-                            header_name: e.target.value,
-                          })
-                        }
-                        placeholder="X-API-Key"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Header Value
-                      </label>
-                      <Input
-                        type="password"
-                        value={formData.auth_config?.header_value || ''}
-                        onChange={(e) =>
-                          handleFormChange('auth_config', {
-                            ...formData.auth_config,
-                            header_value: e.target.value,
-                          })
-                        }
-                        placeholder="Enter API key or ${ENV_VAR}"
-                      />
-                    </div>
+                    <TermInput label={t('types.headerName')} value={formData.auth_config?.header_name || ''} onChange={(e) => handleFormChange('auth_config', { ...formData.auth_config, header_name: e.target.value })} placeholder={t('types.placeholder.headerName')} />
+                    <TermInput label={t('types.headerValue')} type="password" value={formData.auth_config?.header_value || ''} onChange={(e) => handleFormChange('auth_config', { ...formData.auth_config, header_value: e.target.value })} placeholder={t('types.placeholder.headerValue')} />
                   </div>
                 )}
-
                 {formData.auth_type === AuthType.BASIC && (
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Username
-                      </label>
-                      <Input
-                        value={formData.auth_config?.username || ''}
-                        onChange={(e) =>
-                          handleFormChange('auth_config', {
-                            ...formData.auth_config,
-                            username: e.target.value,
-                          })
-                        }
-                        placeholder="Username"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Password
-                      </label>
-                      <Input
-                        type="password"
-                        value={formData.auth_config?.password || ''}
-                        onChange={(e) =>
-                          handleFormChange('auth_config', {
-                            ...formData.auth_config,
-                            password: e.target.value,
-                          })
-                        }
-                        placeholder="Password"
-                      />
-                    </div>
+                    <TermInput label={t('types.username')} value={formData.auth_config?.username || ''} onChange={(e) => handleFormChange('auth_config', { ...formData.auth_config, username: e.target.value })} placeholder={t('types.username')} />
+                    <TermInput label={t('types.password')} type="password" value={formData.auth_config?.password || ''} onChange={(e) => handleFormChange('auth_config', { ...formData.auth_config, password: e.target.value })} placeholder={t('types.password')} />
                   </div>
                 )}
               </div>
             </div>
 
             {/* Template & Response */}
-            <div className="border-t pt-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                Template & Response
+            <div style={{ borderTop: '1px solid var(--border-dim)', paddingTop: '16px' }}>
+              <h3 className="text-xs font-semibold mb-3" style={{ color: 'var(--accent-amber)', fontFamily: 'var(--font-mono)' }}>
+                {t('types.templateResponse')}
               </h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Request Template (Jinja2)
+                  <label className="block text-xs mb-1.5" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    {t('types.requestTemplate')}
                   </label>
                   <textarea
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
+                    className="w-full rounded-lg text-xs"
                     rows={4}
                     value={formData.request_template || ''}
                     onChange={(e) => handleFormChange('request_template', e.target.value)}
                     placeholder={'{"text": "{{content}}", "target": "{{params.target_lang | default(\'en\')}}"}'}
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-default)',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'var(--font-mono)',
+                      padding: '8px 12px',
+                      outline: 'none',
+                      resize: 'vertical' as const,
+                    }}
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Variables: {'{{content}}'}, {'{{params.*}}'}, {'{{task_id}}'}
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                    {t('types.templateVars')}
                   </p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Response JSONPath
-                  </label>
-                  <Input
-                    value={formData.response_jsonpath || ''}
-                    onChange={(e) => handleFormChange('response_jsonpath', e.target.value)}
-                    placeholder="$.data.result"
-                  />
-                </div>
+                <TermInput label={t('types.jsonpathLabel')} value={formData.response_jsonpath || ''} onChange={(e) => handleFormChange('response_jsonpath', e.target.value)} placeholder={t('types.placeholder.jsonpath')} />
               </div>
             </div>
 
             {/* Retry & Rate Limiting */}
-            <div className="border-t pt-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                Retry & Rate Limiting
+            <div style={{ borderTop: '1px solid var(--border-dim)', paddingTop: '16px' }}>
+              <h3 className="text-xs font-semibold mb-3" style={{ color: 'var(--accent-red)', fontFamily: 'var(--font-mono)' }}>
+                {t('types.retryRateLimit')}
               </h3>
               <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Max Retries
-                  </label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={10}
-                    value={formData.max_retries}
-                    onChange={(e) =>
-                      handleFormChange('max_retries', parseInt(e.target.value) || 0)
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Rate Limit Requests
-                  </label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={formData.rate_limit_requests || ''}
-                    onChange={(e) =>
-                      handleFormChange(
-                        'rate_limit_requests',
-                        e.target.value ? parseInt(e.target.value) : undefined
-                      )
-                    }
-                    placeholder="Optional"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Rate Limit Interval (s)
-                  </label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={formData.rate_limit_interval || ''}
-                    onChange={(e) =>
-                      handleFormChange(
-                        'rate_limit_interval',
-                        e.target.value ? parseInt(e.target.value) : undefined
-                      )
-                    }
-                    placeholder="Optional"
-                  />
-                </div>
+                <TermInput label={t('types.maxRetries')} type="number" min={0} max={10} value={formData.max_retries} onChange={(e) => handleFormChange('max_retries', parseInt(e.target.value) || 0)} />
+                <TermInput label={t('types.rateLimitReqs')} type="number" min={1} value={formData.rate_limit_requests || ''} onChange={(e) => handleFormChange('rate_limit_requests', e.target.value ? parseInt(e.target.value) : undefined)} placeholder={t('types.optional')} />
+                <TermInput label={t('types.rateLimitInterval')} type="number" min={1} value={formData.rate_limit_interval || ''} onChange={(e) => handleFormChange('rate_limit_interval', e.target.value ? parseInt(e.target.value) : undefined)} placeholder={t('types.optional')} />
               </div>
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={handleFormClose} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button
+            <button
+              onClick={() => setFormOpen(false)}
+              disabled={submitting}
+              className="px-4 py-2 rounded-lg text-sm transition-all"
+              style={{
+                background: 'var(--bg-tertiary)',
+                border: '1px solid var(--border-default)',
+                color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
+              {t('types.cancel')}
+            </button>
+            <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+              style={{
+                background: submitting ? 'var(--bg-tertiary)' : 'linear-gradient(135deg, var(--accent-green-dim), var(--accent-green))',
+                color: submitting ? 'var(--text-muted)' : '#000',
+                fontFamily: 'var(--font-mono)',
+                boxShadow: submitting ? 'none' : '0 0 16px rgba(0,255,136,0.2)',
+              }}
             >
-              {submitting
-                ? 'Saving...'
-                : editingType
-                ? 'Update Task Type'
-                : 'Create Task Type'}
-            </Button>
+              {submitting ? t('types.saving') : editingType ? t('types.update') : t('types.create')}
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -679,31 +631,41 @@ const TaskTypeManager: React.FC = () => {
       <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Task Type</DialogTitle>
+            <DialogTitle>{t('types.deleteTitle')}</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete task type{' '}
-              <span className="font-mono text-sm">{typeToDelete?.type_id}</span>?
-              <br />
-              <br />
-              This will permanently remove the task type configuration. Active tasks of this
-              type will continue to process but new tasks cannot be submitted.
+              {t('types.deleteConfirm')}{' '}
+              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-red)' }}>{typeToDelete?.type_id}</span>?
+              <br /><br />
+              {t('types.deleteDesc')}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              variant="outline"
+            <button
               onClick={() => setDeleteModalOpen(false)}
               disabled={deleting}
+              className="px-4 py-2 rounded-lg text-sm transition-all"
+              style={{
+                background: 'var(--bg-tertiary)',
+                border: '1px solid var(--border-default)',
+                color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+              }}
             >
-              Cancel
-            </Button>
-            <Button
+              {t('types.cancel')}
+            </button>
+            <button
               onClick={handleDeleteConfirm}
               disabled={deleting}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+              style={{
+                background: deleting ? 'var(--bg-tertiary)' : 'linear-gradient(135deg, var(--accent-red-dim), var(--accent-red))',
+                color: deleting ? 'var(--text-muted)' : '#fff',
+                fontFamily: 'var(--font-mono)',
+                boxShadow: deleting ? 'none' : '0 0 16px rgba(255,71,87,0.2)',
+              }}
             >
-              {deleting ? 'Deleting...' : 'Delete Task Type'}
-            </Button>
+              {deleting ? t('types.deleting') : t('types.deleteTitle')}
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -712,49 +674,63 @@ const TaskTypeManager: React.FC = () => {
       <Dialog open={testModalOpen} onOpenChange={setTestModalOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Test Result: {testTypeId}</DialogTitle>
+            <DialogTitle>{t('types.testTitle', { id: testTypeId || '' })}</DialogTitle>
             <DialogDescription>
-              {testing ? 'Testing task type configuration...' : 'Test completed'}
+              {testing ? t('types.testingDesc') : t('types.testDone')}
             </DialogDescription>
           </DialogHeader>
 
           {testing ? (
             <div className="text-center py-8">
-              <p className="text-gray-500">Sending test request...</p>
+              <Loader2 className="w-8 h-8 mx-auto animate-spin" style={{ color: 'var(--accent-green)' }} />
+              <p className="text-sm mt-2" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                {t('types.sending')}
+              </p>
             </div>
           ) : testResult ? (
             <div className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <span className="font-medium">Status:</span>
-                <Badge
-                  className={
-                    testResult.success
-                      ? 'bg-green-500 border-green-600 text-white border'
-                      : 'bg-red-500 border-red-600 text-white border'
-                  }
+              <div className="flex items-center gap-2">
+                <span className="text-sm" style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{t('types.testStatus')}</span>
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
+                  style={{
+                    background: testResult.success ? 'var(--accent-green-glow)' : 'var(--accent-red-glow)',
+                    border: `1px solid ${testResult.success ? 'rgba(0,255,136,0.2)' : 'rgba(255,71,87,0.2)'}`,
+                    color: testResult.success ? 'var(--accent-green)' : 'var(--accent-red)',
+                    fontFamily: 'var(--font-mono)',
+                  }}
                 >
-                  {testResult.success ? 'Success' : 'Failed'}
-                </Badge>
+                  {testResult.success ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                  {testResult.success ? t('types.testSuccess') : t('types.testFailed')}
+                </span>
               </div>
 
               {testResult.status_code && (
-                <div>
-                  <span className="font-medium">HTTP Status:</span>{' '}
-                  <span className="font-mono">{testResult.status_code}</span>
+                <div className="text-xs" style={{ fontFamily: 'var(--font-mono)' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>{t('types.httpStatus')} </span>
+                  <span style={{ color: 'var(--text-primary)' }}>{testResult.status_code}</span>
                 </div>
               )}
 
               {testResult.response_time_ms && (
-                <div>
-                  <span className="font-medium">Response Time:</span>{' '}
-                  {testResult.response_time_ms}ms
+                <div className="text-xs" style={{ fontFamily: 'var(--font-mono)' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>{t('types.responseTime')} </span>
+                  <span style={{ color: 'var(--text-primary)' }}>{testResult.response_time_ms}ms</span>
                 </div>
               )}
 
               {testResult.request_sent && (
                 <div>
-                  <span className="font-medium">Request Sent:</span>
-                  <pre className="bg-gray-100 rounded p-2 text-xs mt-1 overflow-auto">
+                  <span className="text-xs" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{t('types.requestSent')}</span>
+                  <pre
+                    className="rounded p-2 text-xs mt-1 overflow-auto"
+                    style={{
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-dim)',
+                      color: 'var(--text-secondary)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
                     {JSON.stringify(testResult.request_sent, null, 2)}
                   </pre>
                 </div>
@@ -762,8 +738,16 @@ const TaskTypeManager: React.FC = () => {
 
               {testResult.extracted_result !== undefined && testResult.extracted_result !== null && (
                 <div>
-                  <span className="font-medium">Extracted Result:</span>
-                  <pre className="bg-gray-100 rounded p-2 text-xs mt-1 overflow-auto max-h-48">
+                  <span className="text-xs" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{t('types.extractedResult')}</span>
+                  <pre
+                    className="rounded p-2 text-xs mt-1 overflow-auto max-h-48"
+                    style={{
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-dim)',
+                      color: 'var(--accent-green)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
                     {JSON.stringify(testResult.extracted_result, null, 2)}
                   </pre>
                 </div>
@@ -771,8 +755,16 @@ const TaskTypeManager: React.FC = () => {
 
               {testResult.response_body != null && (
                 <div>
-                  <span className="font-medium">Response Body:</span>
-                  <pre className="bg-gray-100 rounded p-2 text-xs mt-1 overflow-auto max-h-48">
+                  <span className="text-xs" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{t('types.responseBody')}</span>
+                  <pre
+                    className="rounded p-2 text-xs mt-1 overflow-auto max-h-48"
+                    style={{
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-dim)',
+                      color: 'var(--text-secondary)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
                     {typeof testResult.response_body === 'string'
                       ? testResult.response_body
                       : JSON.stringify(testResult.response_body, null, 2)}
@@ -782,17 +774,26 @@ const TaskTypeManager: React.FC = () => {
 
               {testResult.error && (
                 <div>
-                  <span className="font-medium text-red-600">Error:</span>
-                  <p className="text-red-600 text-sm mt-1">{testResult.error}</p>
+                  <span className="text-xs font-medium" style={{ color: 'var(--accent-red)', fontFamily: 'var(--font-mono)' }}>{t('types.testError')}</span>
+                  <p className="text-xs mt-1" style={{ color: 'var(--accent-red)', fontFamily: 'var(--font-mono)' }}>{testResult.error}</p>
                 </div>
               )}
             </div>
           ) : null}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setTestModalOpen(false)}>
-              Close
-            </Button>
+            <button
+              onClick={() => setTestModalOpen(false)}
+              className="px-4 py-2 rounded-lg text-sm transition-all"
+              style={{
+                background: 'var(--bg-tertiary)',
+                border: '1px solid var(--border-default)',
+                color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
+              {t('types.close')}
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
